@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       // định danh các mối quan hệ
     }
   }
-  User.init(
+  Booking.init(
     {
       statusID: DataTypes.STRING,
       doctorID: DataTypes.INTEGER,
