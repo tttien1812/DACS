@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edit user information</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div class="row">
+        <form class="row g-3" action="/put-crud" method="POST">
+          <div class="form-row">
+            <div class="col-12 mt-3"><b>Edit User</b></div>
+            <div class="col-md-6">
+              <label for="inputEmail4" class="form-label">First name</label>
+              <input
+                type="text"
+                class="form-control"
+                id="Firstname"
+                name="firstname"
+                value="<%= user.firstName %>"
+              />
+            </div>
+            <div class="col-md-6">
+              <label for="inputPassword4" class="form-label">Last name</label>
+              <input
+                type="text"
+                class="form-control"
+                id="Lastname"
+                name="lastname"
+                value="<%= user.lastName %>"
+              />
+            </div>
+          </div>
+          <div class="col-md-6">
+            <label for="inputAddress" class="form-label">Address</label>
+            <input
+              type="text"
+              class="form-control"
+              id="inputAddress"
+              placeholder="1234 Main St"
+              name="address"
+              value="<%= user.address %>"
+            />
+          </div>
+          <input name="id" value="<%= user.id %>" type="text" hidden />
+
+          <div class="col-12">
+            <button type="submit" class="btn btn-success">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </body>
+</html>
