@@ -4,7 +4,7 @@ import db from "../models/index";
 const salt = bcrypt.genSaltSync(10);
 
 let createNewUser = async (data) => {
-  return new Promise(async (resolve, rejct) => {
+  return new Promise(async (resolve, reject) => {
     try {
       let hashPasswordFromBcrypt = await hashUserpassword(data.password);
       await db.User.create({
@@ -35,6 +35,20 @@ let hashUserpassword = (password) => {
   });
 };
 
+let getAllUser = () => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      let users = db.User.findAll({
+        raw: true,
+      });
+      resolve(users);
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   createNewUser: createNewUser,
+  getAllUser: getAllUser,
 };
