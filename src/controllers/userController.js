@@ -1,6 +1,6 @@
 import userService from "../services/userService";
 
-let handletLogin = async (req, res) => {
+let handleLogin = async (req, res) => {
   let email = req.body.email;
   let password = req.body.password;
 
@@ -38,6 +38,6 @@ let handleGetAllUsers = async (req, res) => {
   });
 };
 module.exports = {
-  handletLogin: handletLogin,
+  handleLogin: handleLogin,
   handleGetAllUsers: handleGetAllUsers,
 };
