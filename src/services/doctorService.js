@@ -1,4 +1,8 @@
 import db from "../models/index";
+require("dotenv").config();
+import _ from "lodash";
+
+const MAX_NUMBER_SCHEDULE = process.env.MAX_NUMBER_SCHEDULE;
 
 let getTopDoctorHome = (limitInput) => {
   return new Promise(async (resolve, reject) => {
@@ -150,9 +154,63 @@ let getDetailDoctorById = (inputId) => {
   });
 };
 
+let bulkCreateSchedule = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!data.arrSchedule || !data.doctorID || !data.formatedDate) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing Parameter paramater!",
+        });
+      } else {
+        let schedule = data.arrSchedule;
+        if (schedule && schedule.length > 0) {
+          schedule = schedule.map((item) => {
+            item.maxNumber = MAX_NUMBER_SCHEDULE;
+            return item;
+          });
+        }
+
+        //get all exisiting data
+        let exisiting = await db.Schedule.findAll({
+          where: { doctorID: data.doctorID, date: data.formatedDate },
+          attributes: ["timeType", "date", "doctorID", "maxNumber"],
+          raw: true,
+        });
+
+        //convert date
+        if (exisiting && exisiting.length > 0) {
+          exisiting = exisiting.map((item) => {
+            item.date = new Date(item.date).getTime();
+            return item;
+          });
+        }
+
+        //compare different
+        let toCreate = _.differenceWith(schedule, exisiting, (a, b) => {
+          return a.timeType === b.timeType && a.date === b.date;
+        });
+
+        //create data
+        if (toCreate && toCreate.length > 0) {
+          await db.Schedule.bulkCreate(toCreate);
+        }
+
+        resolve({
+          errCode: 0,
+          errMessage: "OK",
+        });
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
   saveDetailInforDoctor: saveDetailInforDoctor,
   getDetailDoctorById: getDetailDoctorById,
+  bulkCreateSchedule: bulkCreateSchedule,
 };
