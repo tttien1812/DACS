@@ -32,6 +32,7 @@ let postInforDoctor = async (req, res) => {
     let response = await doctorService.saveDetailInforDoctor(req.body);
     return res.status(200).json(response);
   } catch (e) {
+    console.log("tien check loi: ", e);
     return res.status(200).json({
       errCode: -1,
       errMessage: "Error from the sever",
@@ -79,6 +80,19 @@ let getScheduleByDate = async (req, res) => {
     });
   }
 };
+
+let getExtraInforDoctorById = async (req, res) => {
+  try {
+    let infor = await doctorService.getExtraInforDoctorById(req.query.doctorID);
+    return res.status(200).json(infor);
+  } catch (e) {
+    console.log(e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from the sever",
+    });
+  }
+};
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -86,4 +100,5 @@ module.exports = {
   getDetailDoctorById: getDetailDoctorById,
   bulkCreateSchedule: bulkCreateSchedule,
   getScheduleByDate: getScheduleByDate,
+  getExtraInforDoctorById: getExtraInforDoctorById,
 };
