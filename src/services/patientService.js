@@ -1,6 +1,12 @@
+import { v4 as uuidv4 } from "uuid";
 import db from "../models/index";
 require("dotenv").config();
 import emailService from "./emailService";
+
+let buildUrlEmail = (doctorID, token) => {
+  let result = `${process.env.URL_REACT}/verify-booking?token=${token}&doctorID=${doctorID}`;
+  return result;
+};
 
 let postBookAppointment = (data) => {
   return new Promise(async (resolve, reject) => {
@@ -17,6 +23,8 @@ let postBookAppointment = (data) => {
           errMessage: "Missing required Parameter!",
         });
       } else {
+        let token = uuidv4();
+
         await emailService.sendSimpleEmail({
           reciverEmail: data.email,
           patientName: data.fullname,
@@ -24,7 +32,7 @@ let postBookAppointment = (data) => {
           doctorName: data.doctorName,
           petName: data.animal,
           language: data.language,
-          redirectLink: "https://www.facebook.com/bungbu.beo.7503/",
+          redirectLink: buildUrlEmail(data.doctorID, token),
         });
 
         //upsert patient
@@ -46,6 +54,7 @@ let postBookAppointment = (data) => {
               patientID: user[0].id,
               date: data.date,
               timeType: data.timeType,
+              token: token,
             },
           });
         }
@@ -61,6 +70,46 @@ let postBookAppointment = (data) => {
   });
 };
 
+let postVerifyBookAppointment = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!data.token || !data.doctorID) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required Parameter!",
+        });
+      } else {
+        let appointment = await db.Booking.findOne({
+          where: {
+            doctorID: data.doctorID,
+            token: data.token,
+            statusID: "S1",
+          },
+          raw: false,
+        });
+        if (appointment) {
+          // await appointment.save({
+          //   statusID: "S2",
+          // });
+          appointment.statusID = "S2";
+          await appointment.save();
+          resolve({
+            errCode: 0,
+            errMessage: "Update the Appointment succeed!",
+          });
+        } else {
+          resolve({
+            errCode: 2,
+            errMessage: "You already have an existing appointment!",
+          });
+        }
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
 module.exports = {
   postBookAppointment: postBookAppointment,
+  postVerifyBookAppointment: postVerifyBookAppointment,
 };
