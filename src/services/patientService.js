@@ -16,7 +16,9 @@ let postBookAppointment = (data) => {
         !data.doctorID ||
         !data.timeType ||
         !data.date ||
-        !data.fullname
+        !data.fullname ||
+        !data.selectedGender ||
+        !data.address
       ) {
         resolve({
           errCode: 1,
@@ -41,6 +43,10 @@ let postBookAppointment = (data) => {
           defaults: {
             email: data.email,
             roleId: "R3",
+            gender: data.selectedGender,
+            address: data.address,
+            firstName: data.fullname,
+            //fix theem animal sua lai model user
           },
         });
 

@@ -9,6 +9,11 @@ module.exports = (sequelize, DataTypes) => {
      */
     static associate(models) {
       // định danh các mối quan hệ
+      Booking.belongsTo(models.User, {
+        foreignKey: "patientID",
+        targetKey: "id",
+        as: "patientData",
+      });
     }
   }
   Booking.init(
