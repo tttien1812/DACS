@@ -1,6 +1,7 @@
 import db from "../models/index";
 require("dotenv").config();
 import _ from "lodash";
+import emailService from "../services/emailService";
 import { Op } from "sequelize";
 
 const MAX_NUMBER_SCHEDULE = process.env.MAX_NUMBER_SCHEDULE;
@@ -555,6 +556,45 @@ let getListPatientForDoctor = (doctorID, date) => {
     }
   });
 };
+
+let sendRemedy = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!data.doctorID || !data.email || !data.patientID || !data.timeType) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required parameters!",
+        });
+      } else {
+        //update patient status
+        let appointment = await db.Booking.findOne({
+          where: {
+            doctorID: data.doctorID,
+            patientID: data.patientID,
+            timeType: data.timeType,
+            statusID: "S2",
+          },
+          raw: false,
+        });
+
+        if (appointment) {
+          appointment.statusID = "S3";
+          await appointment.save();
+        }
+
+        //send email remedy
+        await emailService.sendAttachment(data);
+        resolve({
+          errCode: 0,
+          errMessage: "ok",
+        });
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -565,4 +605,5 @@ module.exports = {
   getExtraInforDoctorById: getExtraInforDoctorById,
   getProfileDoctorById: getProfileDoctorById,
   getListPatientForDoctor: getListPatientForDoctor,
+  sendRemedy: sendRemedy,
 };
