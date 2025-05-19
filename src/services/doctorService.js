@@ -1,6 +1,7 @@
 import db from "../models/index";
 require("dotenv").config();
 import _ from "lodash";
+import { Op } from "sequelize";
 
 const MAX_NUMBER_SCHEDULE = process.env.MAX_NUMBER_SCHEDULE;
 
@@ -446,8 +447,57 @@ let getProfileDoctorById = (inputId) => {
   });
 };
 
+// let getListPatientForDoctor = (doctorID, date) => {
+//   return new Promise(async (resolve, reeject) => {
+//     try {
+//       if (!doctorID || !date) {
+//         resolve({
+//           errCode: 1,
+//           errMessage: "Missing required parameters!",
+//         });
+//       } else {
+//         let data = await db.Booking.findAll({
+//           where: {
+//             statusID: "S2",
+//             doctorID: doctorID,
+//             date: date,
+//           },
+//           include: [
+//             {
+//               model: db.User, // qua patienService ham postBookAppointment chinh them anial
+//               attributes: ["email", "firstName", "gender", "address"],
+//               as: "patientData",
+//               include: [
+//                 {
+//                   model: db.Allcode,
+//                   as: "genderData",
+//                   attributes: ["valueEN", "valueVI"],
+//                 },
+//               ],
+//             },
+//             {
+//               model: db.Allcode,
+//               as: "timeTypeDataPatient",
+//               attributes: ["valueEN", "valueVI"],
+//             },
+//           ],
+//           raw: false,
+//           nest: true,
+//         });
+
+//         resolve({
+//           errCode: 0,
+//           data: data,
+//         });
+//       }
+//     } catch (e) {
+//       reject(e);
+//     }
+//   });
+// };
+
 let getListPatientForDoctor = (doctorID, date) => {
-  return new Promise(async (resolve, reeject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       if (!doctorID || !date) {
         resolve({
@@ -455,17 +505,28 @@ let getListPatientForDoctor = (doctorID, date) => {
           errMessage: "Missing required parameters!",
         });
       } else {
+        // Chuyển timestamp thành dạng ngày bắt đầu và kết thúc trong ngày đó
+        let startOfDay = new Date(+date);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        let endOfDay = new Date(+date);
+        endOfDay.setHours(23, 59, 59, 999);
+
         let data = await db.Booking.findAll({
           where: {
             statusID: "S2",
             doctorID: doctorID,
+            // date: {
+            //   [Op.between]: [startOfDay, endOfDay],
+            // },
             date: date,
           },
           include: [
             {
-              model: db.User, // qua patienService ham postBookAppointment chinh them anial
-              attributes: ["email", "firstName", "gender", "address"],
+              model: db.User,
               as: "patientData",
+              attributes: ["email", "firstName", "gender", "address"],
+
               include: [
                 {
                   model: db.Allcode,
@@ -473,6 +534,11 @@ let getListPatientForDoctor = (doctorID, date) => {
                   attributes: ["valueEN", "valueVI"],
                 },
               ],
+            },
+            {
+              model: db.Allcode,
+              as: "timeTypeDataPatient",
+              attributes: ["valueEN", "valueVI"],
             },
           ],
           raw: false,
