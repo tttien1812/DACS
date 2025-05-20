@@ -5,6 +5,7 @@ import doctorController from "../controllers/doctorController";
 import patientController from "../controllers/patientController";
 import specialtyController from "../controllers/specialtyController";
 import clinicController from "../controllers/clinicController";
+import handbookController from "../controllers/handbookController";
 
 let router = express.Router();
 
@@ -79,12 +80,12 @@ let initWebRoutes = (app) => {
   );
 
   //handbook
-  // router.post("/api/create-new-specialty", specialtyController.createSpecialty);
-  // router.get("/api/get-specialty", specialtyController.getAllSpecialty);
-  // router.get(
-  //   "/api/get-detail-specialty-by-id",
-  //   specialtyController.getDetailSpecialtyById
-  // );
+  router.post("/api/create-new-handbook", handbookController.createHandbook);
+  router.get("/api/get-handbook", handbookController.getAllHandbook);
+  router.get(
+    "/api/get-detail-handbook-by-id",
+    handbookController.getDetailHandbookById
+  );
 
   return app.use("/", router);
 };
