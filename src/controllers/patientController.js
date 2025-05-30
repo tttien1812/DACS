@@ -25,7 +25,21 @@ let postVerifyBookAppointment = async (req, res) => {
   }
 };
 
+let getBookingHistory = async (req, res) => {
+  try {
+    let infor = await patientService.getBookingHistory(req.body.email);
+    return res.status(200).json(infor);
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Error from the server",
+    });
+  }
+};
+
 module.exports = {
-  postBookAppointment,
-  postVerifyBookAppointment,
+  postBookAppointment: postBookAppointment,
+  postVerifyBookAppointment: postVerifyBookAppointment,
+  getBookingHistory: getBookingHistory,
 };

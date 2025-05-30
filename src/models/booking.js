@@ -20,6 +20,12 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: "keyMap",
         as: "timeTypeDataPatient",
       });
+
+      Booking.belongsTo(models.User, {
+        foreignKey: "doctorID",
+        targetKey: "id",
+        as: "doctorData", // PHẢI có nếu muốn hiển thị tên bác sĩ
+      });
     }
   }
   Booking.init(
@@ -30,6 +36,7 @@ module.exports = (sequelize, DataTypes) => {
       date: DataTypes.STRING,
       timeType: DataTypes.STRING,
       token: DataTypes.STRING,
+      animal: DataTypes.STRING,
     },
     {
       sequelize,

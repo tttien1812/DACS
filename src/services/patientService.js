@@ -18,7 +18,8 @@ let postBookAppointment = (data) => {
         !data.date ||
         !data.fullname ||
         !data.selectedGender ||
-        !data.address
+        !data.address ||
+        !data.animal
       ) {
         resolve({
           errCode: 1,
@@ -61,6 +62,7 @@ let postBookAppointment = (data) => {
               date: data.date,
               timeType: data.timeType,
               token: token,
+              animal: data.animal,
             },
           });
         }
@@ -115,7 +117,58 @@ let postVerifyBookAppointment = (data) => {
     }
   });
 };
+
+let getBookingHistory = (email) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!email) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required Parameter!",
+        });
+      } else {
+        let user = await db.User.findOne({ where: { email } });
+        if (!user) {
+          resolve({
+            errCode: 2,
+            errMessage: "User not found!",
+          });
+        } else {
+          let bookings = await db.Booking.findAll({
+            where: { patientID: user.id, statusID: "S2" },
+            include: [
+              {
+                model: db.User,
+                as: "patientData",
+                attributes: ["firstName", "lastName", "phoneNumber", "email"],
+              },
+              {
+                model: db.User,
+                as: "doctorData",
+                attributes: ["firstName", "lastName"],
+              },
+              {
+                model: db.Allcode,
+                as: "timeTypeDataPatient",
+                attributes: ["valueVI", "valueEN"],
+              },
+            ],
+            raw: false,
+            nest: true,
+          });
+          resolve({
+            errCode: 0,
+            data: bookings,
+          });
+        }
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
 module.exports = {
   postBookAppointment: postBookAppointment,
   postVerifyBookAppointment: postVerifyBookAppointment,
+  getBookingHistory: getBookingHistory,
 };
