@@ -46,6 +46,24 @@ module.exports = (sequelize, DataTypes) => {
       image: DataTypes.STRING,
       roleId: DataTypes.STRING,
       positionId: DataTypes.STRING,
+
+      // Mới:
+      status: {
+        type: DataTypes.STRING,
+        defaultValue: "PENDING",
+      },
+      interview_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      notification_sent: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      admin_note: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       sequelize,

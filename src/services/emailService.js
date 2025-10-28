@@ -161,7 +161,53 @@ let sendAttachment = async (dataSend) => {
   });
 };
 
+let sendInterviewEmail = async (dataSend) => {
+  let transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_APP,
+      pass: process.env.EMAIL_APP_PASSWORD,
+    },
+  });
+
+  // tạo template HTML
+  let htmlContent = `
+    <div style="font-family: Arial, sans-serif; padding: 20px;">
+      <h2>🎉 Xin chào ${dataSend.doctorName},</h2>
+
+      <p>Chúc mừng bạn đã vượt qua vòng xét duyệt hồ sơ bác sĩ tại <strong>FurCare</strong>.</p>
+      <p>Chúng tôi trân trọng mời bạn tham gia <strong>buổi phỏng vấn</strong> để hoàn tất quy trình tuyển chọn.</p>
+
+      <h4>📅 Thông tin buổi phỏng vấn:</h4>
+      <ul>
+        <li><strong>Ngày:</strong> ${dataSend.date}</li>
+        <li><strong>Thời gian:</strong> ${dataSend.time}</li>
+        <li><strong>Hình thức:</strong> ${dataSend.method}</li>
+        <li><strong>Liên hệ:</strong> ${
+          dataSend.contact || "support@furcare.com"
+        }</li>
+      </ul>
+
+      <p>Vui lòng phản hồi email này để xác nhận lịch phỏng vấn hoặc liên hệ trực tiếp với chúng tôi nếu bạn cần đổi lịch.</p>
+
+      <p style="margin-top: 20px;">Trân trọng,<br/>Đội ngũ FurCare 🐾</p>
+      <hr/>
+      <small>Email này được gửi tự động. Vui lòng không trả lời trực tiếp.</small>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: '"FurCare" <FurCareee@gmail.com>',
+    to: dataSend.email,
+    subject: "Thư mời phỏng vấn từ FurCare",
+    html: htmlContent,
+  });
+};
+
 module.exports = {
   sendSimpleEmail: sendSimpleEmail,
   sendAttachment: sendAttachment,
+  sendInterviewEmail,
 };

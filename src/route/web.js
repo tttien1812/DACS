@@ -6,6 +6,7 @@ import patientController from "../controllers/patientController";
 import specialtyController from "../controllers/specialtyController";
 import clinicController from "../controllers/clinicController";
 import handbookController from "../controllers/handbookController";
+import aiController from "../controllers/aiController";
 
 let router = express.Router();
 
@@ -56,6 +57,21 @@ let initWebRoutes = (app) => {
   );
   router.post("/api/send-remedy", doctorController.sendRemedy);
 
+  router.get("/api/get-pending-doctors", doctorController.getPendingDoctors);
+  router.put("/api/activate-doctor", doctorController.activateDoctor);
+  router.get(
+    "/api/get-approved-doctors",
+    doctorController.getApprovedDoctorsList
+  );
+  // router.get("/api/get-rejected-doctors", doctorController.getRejectedDoctors);
+
+  router.post("/api/approve-doctor", doctorController.approveDoctor);
+  router.post("/api/reject-doctor", doctorController.rejectDoctor);
+  router.post(
+    "/api/send-interview-email",
+    doctorController.handleSendInterviewEmail
+  );
+
   router.post(
     "/api/patient-book-appointment",
     patientController.postBookAppointment
@@ -88,6 +104,9 @@ let initWebRoutes = (app) => {
     "/api/get-detail-handbook-by-id",
     handbookController.getDetailHandbookById
   );
+
+  //AI
+  router.post("/api/ask", aiController.handleAskAI);
 
   return app.use("/", router);
 };

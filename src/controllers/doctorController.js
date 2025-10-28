@@ -135,6 +135,89 @@ let sendRemedy = async (req, res) => {
   }
 };
 
+let getPendingDoctors = async (req, res) => {
+  try {
+    let data = await doctorService.getPendingDoctors();
+    return res.status(200).json(data);
+  } catch (e) {
+    console.log("getPendingDoctors error: ", e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
+let approveDoctor = async (req, res) => {
+  try {
+    let doctorId = req.body.doctorId; // đảm bảo có ID
+    if (!doctorId) {
+      return res.status(400).json({
+        errCode: 1,
+        errMessage: "Missing doctorId in request body",
+      });
+    }
+
+    let data = await doctorService.approveDoctor(doctorId);
+    return res.status(200).json(data);
+  } catch (e) {
+    console.log("approveDoctor error: ", e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
+let rejectDoctor = async (req, res) => {
+  try {
+    let data = await doctorService.rejectDoctor(req.body.doctorId);
+    return res.status(200).json(data);
+  } catch (e) {
+    console.log("rejectDoctor error: ", e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
+let handleSendInterviewEmail = async (req, res) => {
+  try {
+    let response = await doctorService.sendInterviewEmail(req.body);
+    return res.status(200).json(response);
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({ errCode: -1, errMessage: "Server error" });
+  }
+};
+
+let getApprovedDoctorsList = async (req, res) => {
+  try {
+    let data = await doctorService.getApprovedDoctorsList();
+    return res.status(200).json(data);
+  } catch (e) {
+    console.log("getApprovedDoctors error: ", e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
+let activateDoctor = async (req, res) => {
+  try {
+    let data = await doctorService.activateDoctor(req.body.doctorId);
+    return res.status(200).json(data);
+  } catch (e) {
+    console.log("activateDoctor error: ", e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -146,4 +229,10 @@ module.exports = {
   getProfileDoctorById: getProfileDoctorById,
   getListPatientForDoctor: getListPatientForDoctor,
   sendRemedy: sendRemedy,
+  getPendingDoctors,
+  approveDoctor,
+  rejectDoctor,
+  getApprovedDoctorsList,
+  activateDoctor,
+  handleSendInterviewEmail,
 };

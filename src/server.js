@@ -4,9 +4,11 @@ import viewEngine from "./config/viewEngine";
 import initWebRoutes from "./route/web";
 import connectDB from "./config/connectDB";
 import { config } from "dotenv";
+import dotenv from "dotenv";
 import cors from "cors";
 
-require("dotenv").config();
+// require("dotenv").config();
+dotenv.config();
 
 let app = express();
 

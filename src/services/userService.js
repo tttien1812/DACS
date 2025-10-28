@@ -125,6 +125,7 @@ let createNewUser = (data) => {
           roleId: data.roleId,
           positionId: data.positionId,
           image: data.avatar,
+          status: data.roleId === "R2" ? "PENDING" : "ACTIVE",
         });
         resolve({
           errCode: 0,

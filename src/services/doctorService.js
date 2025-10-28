@@ -595,6 +595,171 @@ let sendRemedy = (data) => {
   });
 };
 
+let getPendingDoctors = async () => {
+  try {
+    let doctors = await db.User.findAll({
+      where: { roleId: "R2", status: "PENDING" },
+      attributes: { exclude: ["password"] }, // không trả password
+    });
+
+    return {
+      errCode: 0,
+      data: doctors,
+    };
+  } catch (e) {
+    console.log("getPendingDoctors service error: ", e);
+    return {
+      errCode: -1,
+      errMessage: "Error from server",
+    };
+  }
+};
+
+const approveDoctor = async (doctorId) => {
+  try {
+    let result = await db.User.update(
+      { status: "APPROVED" },
+      { where: { id: doctorId, roleId: "R2" } } // chỉ áp dụng cho bác sĩ
+    );
+
+    if (result[0] === 0) {
+      return { errCode: 1, errMessage: "Doctor not found or not eligible" };
+    }
+
+    return { errCode: 0, errMessage: "Doctor approved successfully" };
+  } catch (e) {
+    console.log("approveDoctor service error:", e);
+    return { errCode: -1, errMessage: "Server error" };
+  }
+};
+
+const rejectDoctor = async (doctorId) => {
+  try {
+    let result = await db.User.update(
+      { status: "REJECTED" },
+      { where: { id: doctorId } }
+    );
+    if (result[0] === 0) {
+      return { errCode: 1, errMessage: "Doctor not found" };
+    }
+
+    return { errCode: 0, errMessage: "Doctor rejected successfully" };
+  } catch (e) {
+    console.log("rejectDoctorService error:", e);
+    return { errCode: -1, errMessage: "Server error" };
+  }
+};
+
+let sendInterviewEmail = async (data) => {
+  try {
+    const { doctorId, date, time, method, contact } = data;
+
+    // ✅ 1. Lấy thông tin bác sĩ từ DB
+    let doctor = await db.User.findOne({
+      where: { id: doctorId },
+      raw: true,
+    });
+
+    if (!doctor) {
+      return { errCode: 1, errMessage: "Không tìm thấy bác sĩ" };
+    }
+
+    // ✅ 2. Định dạng lại ngày & giờ
+    // Chuyển '2025-10-09' → '09/10/2025'
+    const formattedDate = new Date(date).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    // Đảm bảo giờ hiển thị đúng 24h (nếu người dùng chọn input type="time" thì mặc định là 24h)
+    // Nhưng ta vẫn đảm bảo format chuẩn “HH:mm”
+    const [hours, minutes] = time.split(":");
+    const formattedTime = `${hours.padStart(2, "0")}:${minutes.padStart(
+      2,
+      "0"
+    )}`;
+
+    // ✅ 3. Chuẩn bị dữ liệu gửi sang emailService
+    let dataSend = {
+      email: doctor.email,
+      doctorName: `${doctor.lastName} ${doctor.firstName}`,
+      date: formattedDate,
+      time: formattedTime,
+      method,
+      contact,
+    };
+
+    // ✅ 4. Gửi email
+    await emailService.sendInterviewEmail(dataSend);
+
+    return { errCode: 0, message: "Email phỏng vấn đã được gửi!" };
+  } catch (e) {
+    console.log("sendInterviewEmail error:", e);
+    return { errCode: -1, errMessage: "Lỗi server khi gửi email" };
+  }
+};
+
+let getApprovedDoctorsList = async () => {
+  try {
+    let doctors = await db.User.findAll({
+      where: { roleId: "R2", status: "APPROVED" },
+      attributes: { exclude: ["password"] },
+    });
+
+    return {
+      errCode: 0,
+      data: doctors,
+    };
+  } catch (e) {
+    throw e;
+  }
+};
+
+// let getRejectedDoctors = async () => {
+//   try {
+//     let doctors = await db.User.findAll({
+//       where: { roleId: "R2", status: "REJECTED" },
+//       attributes: { exclude: ["password"] },
+//     });
+
+//     return {
+//       errCode: 0,
+//       data: doctors,
+//     };
+//   } catch (e) {
+//     throw e;
+//   }
+// };
+
+let activateDoctor = async (doctorId) => {
+  try {
+    let doctor = await db.User.findOne({
+      where: { id: doctorId, roleId: "R2", status: "APPROVED" }, // ví dụ R2 là role bác sĩ
+    });
+
+    if (!doctor) {
+      return {
+        errCode: 1,
+        errMessage: "Doctor not found!",
+      };
+    }
+
+    await db.User.update({ status: "ACTIVE" }, { where: { id: doctorId } });
+
+    return {
+      errCode: 0,
+      message: "Doctor activated successfully!",
+    };
+  } catch (e) {
+    console.log("activateDoctor service error: ", e);
+    return {
+      errCode: -1,
+      errMessage: "Error from server",
+    };
+  }
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -606,4 +771,11 @@ module.exports = {
   getProfileDoctorById: getProfileDoctorById,
   getListPatientForDoctor: getListPatientForDoctor,
   sendRemedy: sendRemedy,
+  getPendingDoctors,
+  approveDoctor,
+  rejectDoctor,
+  getApprovedDoctorsList,
+  // getRejectedDoctors,
+  activateDoctor,
+  sendInterviewEmail,
 };

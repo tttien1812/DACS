@@ -36,7 +36,7 @@ let getAllHandbook = () => {
   return new Promise(async (resolve, reject) => {
     try {
       let data = await db.Handbook.findAll({
-        attributes: ["id", "name", "image"],
+        attributes: ["id", "name", "image", "descriptionHTML"],
       });
       if (data && data.length > 0) {
         data = data.map((item) => {
