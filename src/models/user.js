@@ -32,6 +32,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "patientID",
         as: "patientData",
       });
+      User.belongsTo(models.Specialty, {
+        foreignKey: "specialtyId",
+        targetKey: "id",
+        as: "specialtyData",
+      });
     }
   }
   User.init(
@@ -56,12 +61,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      notification_sent: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
+      university: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
-      admin_note: {
+      expectation: {
         type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      specialtyId: {
+        type: DataTypes.INTEGER,
         allowNull: true,
       },
     },

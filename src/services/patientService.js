@@ -3,6 +3,8 @@ import db from "../models/index";
 require("dotenv").config();
 import emailService from "./emailService";
 
+const { Op } = require("sequelize");
+
 let buildUrlEmail = (doctorID, token) => {
   let result = `${process.env.URL_REACT}/verify-booking?token=${token}&doctorID=${doctorID}`;
   return result;
@@ -28,16 +30,6 @@ let postBookAppointment = (data) => {
       } else {
         let token = uuidv4();
 
-        await emailService.sendSimpleEmail({
-          reciverEmail: data.email,
-          patientName: data.fullname,
-          time: data.timeString,
-          doctorName: data.doctorName,
-          petName: data.animal,
-          language: data.language,
-          redirectLink: buildUrlEmail(data.doctorID, token),
-        });
-
         //upsert patient
         let user = await db.User.findOrCreate({
           where: { email: data.email },
@@ -54,7 +46,12 @@ let postBookAppointment = (data) => {
         //create a booking record
         if (user[0]) {
           await db.Booking.findOrCreate({
-            where: { patientID: user[0].id },
+            where: {
+              patientID: user[0].id,
+              doctorID: data.doctorID,
+              date: data.date,
+              timeType: data.timeType,
+            },
             defaults: {
               statusID: "S1",
               doctorID: data.doctorID,
@@ -167,8 +164,271 @@ let getBookingHistory = (email) => {
     }
   });
 };
+
+let getBookingStatusByEmail = (email) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!email) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Missing email",
+          data: [],
+        });
+      }
+
+      // tìm user có email
+      let user = await db.User.findOne({
+        where: { email: email },
+        attributes: ["id"],
+      });
+
+      if (!user) {
+        return resolve({
+          errCode: 2,
+          errMessage: "Email not exist",
+          data: [],
+        });
+      }
+
+      // lấy lịch của user này, nhưng chỉ lấy status = S2
+      let data = await db.Booking.findAll({
+        where: {
+          patientId: user.id,
+          statusId: { [Op.in]: ["S1", "S2", "S4"] },
+        },
+        attributes: [
+          "id",
+          "statusId",
+          "date",
+          "timeType",
+          "animal",
+          "doctorId",
+        ],
+        include: [
+          {
+            model: db.User,
+            as: "doctorData",
+            attributes: [
+              "id",
+              "firstName",
+              "lastName",
+              "gender",
+              "phoneNumber",
+              "image",
+              "email",
+            ],
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+          {
+            model: db.User,
+            as: "patientData",
+            attributes: ["email", "firstName", "gender", "address"],
+
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+          {
+            model: db.Allcode,
+            as: "timeTypeDataPatient",
+            attributes: ["valueEN", "valueVI"],
+          },
+          {
+            model: db.Allcode,
+            as: "statusData",
+            attributes: ["valueEN", "valueVI"],
+          },
+        ],
+        raw: true,
+        nest: true,
+      });
+
+      return resolve({
+        errCode: 0,
+        errMessage: "OK",
+        data,
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
+let cancelBooking = async (bookingId) => {
+  try {
+    if (!bookingId) {
+      return {
+        errCode: 1,
+        errMessage: "Missing bookingId",
+      };
+    }
+
+    let booking = await db.Booking.findOne({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      return {
+        errCode: 2,
+        errMessage: "Booking not found",
+      };
+    }
+
+    // update sang S5 (ẩn hoàn toàn trên FE)
+    await db.Booking.update({ statusID: "S5" }, { where: { id: bookingId } });
+
+    return {
+      errCode: 0,
+      errMessage: "Cancel success",
+    };
+  } catch (e) {
+    console.log("Service error:", e);
+    return {
+      errCode: -1,
+      errMessage: "Server error",
+    };
+  }
+};
+
+let rescheduleBooking = async (data) => {
+  try {
+    if (!data.bookingId || !data.date || !data.timeType) {
+      return {
+        errCode: 1,
+        errMessage: "Missing required params",
+      };
+    }
+
+    await db.Booking.update(
+      {
+        date: data.date,
+        timeType: data.timeType,
+        statusID: "S1", // đưa về trạng thái chờ xác nhận lại
+      },
+      { where: { id: data.bookingId } }
+    );
+
+    return { errCode: 0, errMessage: "Reschedule success" };
+  } catch (e) {
+    console.log("Service error:", e);
+    return { errCode: -1, errMessage: "Server error" };
+  }
+};
+
+let getBookingStatusS3 = (email) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!email) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Missing email",
+          data: [],
+        });
+      }
+
+      // tìm user theo email
+      let user = await db.User.findOne({
+        where: { email: email },
+        attributes: ["id"],
+      });
+
+      if (!user) {
+        return resolve({
+          errCode: 2,
+          errMessage: "Email not exist",
+          data: [],
+        });
+      }
+
+      // lấy lịch có status = S3
+      let data = await db.Booking.findAll({
+        where: {
+          patientId: user.id,
+          statusId: "S3",
+        },
+        attributes: [
+          "id",
+          "statusId",
+          "date",
+          "timeType",
+          "animal",
+          "doctorId",
+        ],
+        include: [
+          {
+            model: db.User,
+            as: "doctorData",
+            attributes: [
+              "id",
+              "firstName",
+              "lastName",
+              "gender",
+              "phoneNumber",
+              "image",
+              "email",
+            ],
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+          {
+            model: db.User,
+            as: "patientData",
+            attributes: ["email", "firstName", "gender", "address"],
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+          {
+            model: db.Allcode,
+            as: "timeTypeDataPatient",
+            attributes: ["valueEN", "valueVI"],
+          },
+          {
+            model: db.Allcode,
+            as: "statusData",
+            attributes: ["valueEN", "valueVI"],
+          },
+        ],
+        raw: true,
+        nest: true,
+      });
+
+      return resolve({
+        errCode: 0,
+        errMessage: "OK",
+        data,
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   postBookAppointment: postBookAppointment,
   postVerifyBookAppointment: postVerifyBookAppointment,
   getBookingHistory: getBookingHistory,
+  getBookingStatusByEmail,
+  cancelBooking,
+  rescheduleBooking,
+  getBookingStatusS3,
 };

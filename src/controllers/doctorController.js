@@ -107,6 +107,22 @@ let getProfileDoctorById = async (req, res) => {
   }
 };
 
+let getListNewBookingForDoctor = async (req, res) => {
+  try {
+    let infor = await doctorService.getListNewBookingForDoctor(
+      req.query.doctorID,
+      req.query.date
+    );
+    return res.status(200).json(infor);
+  } catch (e) {
+    console.log(e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
 let getListPatientForDoctor = async (req, res) => {
   try {
     let infor = await doctorService.getListPatientForDoctor(
@@ -122,6 +138,33 @@ let getListPatientForDoctor = async (req, res) => {
     });
   }
 };
+
+let approveBooking = async (req, res) => {
+  try {
+    let result = await doctorService.approveBooking(req.body);
+    return res.status(200).json(result);
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
+let rejectBooking = async (req, res) => {
+  try {
+    let result = await doctorService.rejectBooking(req.body);
+    return res.status(200).json(result);
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Error from server",
+    });
+  }
+};
+
 let sendRemedy = async (req, res) => {
   try {
     let infor = await doctorService.sendRemedy(req.body);
@@ -218,6 +261,20 @@ let activateDoctor = async (req, res) => {
   }
 };
 
+let getDoctorById = async (req, res) => {
+  try {
+    let doctorId = req.query.doctorId; // lấy từ query như thói quen backend hiện tại
+    let infor = await doctorService.getDoctorByIdService(doctorId);
+    return res.status(200).json(infor);
+  } catch (e) {
+    console.error(" Error from getDoctorById:", e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from the server",
+    });
+  }
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -235,4 +292,8 @@ module.exports = {
   getApprovedDoctorsList,
   activateDoctor,
   handleSendInterviewEmail,
+  getDoctorById,
+  approveBooking,
+  getListNewBookingForDoctor,
+  rejectBooking,
 };

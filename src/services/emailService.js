@@ -206,8 +206,51 @@ let sendInterviewEmail = async (dataSend) => {
   });
 };
 
+let sendCancelEmail = async (dataSend) => {
+  let transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_APP,
+      pass: process.env.EMAIL_APP_PASSWORD,
+    },
+  });
+
+  let info = await transporter.sendMail({
+    from: '"FurCare" <Furcareee@gmail.com>',
+    to: dataSend.reciverEmail,
+    subject: "Thông báo thay đổi lịch khám từ FurCare",
+    html: getCancelHTMLEmail(dataSend),
+  });
+};
+
+let getCancelHTMLEmail = (dataSend) => {
+  return `
+  <div style="font-family: Arial, sans-serif; padding: 20px;">
+    <h3>Xin chào ${dataSend.patientName},</h3>
+    <p>Rất tiếc, bác sĩ <strong>${dataSend.doctorName}</strong> hiện đang kẹt lịch đột xuất nên không thể nhận lịch khám của bạn vào thời gian:</p>
+    
+    <ul>
+      <li><strong>Thú cưng:</strong> ${dataSend.petName}</li>
+      <li><strong>Thời gian:</strong> ${dataSend.time}</li>
+    </ul>
+
+    <p>Chúng tôi đã hủy lịch hẹn này. Bạn có thể đặt lại vào thời gian khác phù hợp hơn.</p>
+
+    <p>Chúng tôi thành thật xin lỗi vì sự bất tiện này.</p>
+
+    <p style="margin-top: 30px;">Trân trọng,<br/>Đội ngũ FurCare 🐾</p>
+
+    <hr/>
+    <small>Email này được gửi tự động từ hệ thống. Vui lòng không trả lời email này.</small>
+  </div>
+  `;
+};
+
 module.exports = {
   sendSimpleEmail: sendSimpleEmail,
   sendAttachment: sendAttachment,
   sendInterviewEmail,
+  sendCancelEmail,
 };

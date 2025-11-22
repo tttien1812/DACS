@@ -26,6 +26,12 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: "id",
         as: "doctorData", // PHẢI có nếu muốn hiển thị tên bác sĩ
       });
+
+      Booking.belongsTo(models.Allcode, {
+        foreignKey: "statusID",
+        targetKey: "keyMap",
+        as: "statusData",
+      });
     }
   }
   Booking.init(

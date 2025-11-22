@@ -7,6 +7,7 @@ import specialtyController from "../controllers/specialtyController";
 import clinicController from "../controllers/clinicController";
 import handbookController from "../controllers/handbookController";
 import aiController from "../controllers/aiController";
+import orderController from "../controllers/orderController";
 
 let router = express.Router();
 
@@ -52,6 +53,15 @@ let initWebRoutes = (app) => {
   );
 
   router.get(
+    "/api/get-list-new-booking-for-doctor",
+    doctorController.getListNewBookingForDoctor
+  );
+
+  router.post("/api/approve-booking", doctorController.approveBooking);
+
+  router.post("/api/reject-booking", doctorController.rejectBooking);
+
+  router.get(
     "/api/get-list-patient-for-doctor",
     doctorController.getListPatientForDoctor
   );
@@ -72,6 +82,8 @@ let initWebRoutes = (app) => {
     doctorController.handleSendInterviewEmail
   );
 
+  router.get("/api/get-doctor-by-id", doctorController.getDoctorById);
+
   router.post(
     "/api/patient-book-appointment",
     patientController.postBookAppointment
@@ -81,6 +93,19 @@ let initWebRoutes = (app) => {
     patientController.postVerifyBookAppointment
   );
 
+  router.post(
+    "/api/get-booking-status",
+    patientController.getBookingStatusByEmail
+  );
+
+  router.put("/api/cancel-booking", patientController.cancelBooking);
+
+  router.put("/api/reschedule-booking", patientController.rescheduleBooking);
+
+  router.post(
+    "/api/get-booking-status-s3",
+    patientController.getBookingStatusS3
+  );
   router.post("/api/get-booking-history", patientController.getBookingHistory);
 
   router.post("/api/create-new-specialty", specialtyController.createSpecialty);
@@ -107,6 +132,8 @@ let initWebRoutes = (app) => {
 
   //AI
   router.post("/api/ask", aiController.handleAskAI);
+
+  router.post("/api/order", orderController.createOrder);
 
   return app.use("/", router);
 };

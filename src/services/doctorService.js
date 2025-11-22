@@ -447,55 +447,184 @@ let getProfileDoctorById = (inputId) => {
     }
   });
 };
+//-----------------------------------------------------------
 
-// let getListPatientForDoctor = (doctorID, date) => {
-//   return new Promise(async (resolve, reeject) => {
-//     try {
-//       if (!doctorID || !date) {
-//         resolve({
-//           errCode: 1,
-//           errMessage: "Missing required parameters!",
-//         });
-//       } else {
-//         let data = await db.Booking.findAll({
-//           where: {
-//             statusID: "S2",
-//             doctorID: doctorID,
-//             date: date,
-//           },
-//           include: [
-//             {
-//               model: db.User, // qua patienService ham postBookAppointment chinh them anial
-//               attributes: ["email", "firstName", "gender", "address"],
-//               as: "patientData",
-//               include: [
-//                 {
-//                   model: db.Allcode,
-//                   as: "genderData",
-//                   attributes: ["valueEN", "valueVI"],
-//                 },
-//               ],
-//             },
-//             {
-//               model: db.Allcode,
-//               as: "timeTypeDataPatient",
-//               attributes: ["valueEN", "valueVI"],
-//             },
-//           ],
-//           raw: false,
-//           nest: true,
-//         });
+let getListNewBookingForDoctor = (doctorID, date) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!doctorID) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required parameter!",
+        });
+      } else {
+        let data = await db.Booking.findAll({
+          where: {
+            doctorID: doctorID,
+            statusID: "S1", // Lịch mới – chưa duyệt
+            // date: date,
+          },
+          include: [
+            {
+              model: db.User,
+              as: "patientData",
+              attributes: ["email", "firstName", "address", "gender"],
+              include: [
+                {
+                  model: db.Allcode,
+                  as: "genderData",
+                  attributes: ["valueEN", "valueVI"],
+                },
+              ],
+            },
+            {
+              model: db.Allcode,
+              as: "timeTypeDataPatient",
+              attributes: ["valueEN", "valueVI"],
+            },
+          ],
+          raw: false,
+          nest: true,
+        });
 
-//         resolve({
-//           errCode: 0,
-//           data: data,
-//         });
-//       }
-//     } catch (e) {
-//       reject(e);
-//     }
-//   });
-// };
+        resolve({
+          errCode: 0,
+          data,
+        });
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
+let approveBooking = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!data.doctorID || !data.patientID || !data.timeType) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required parameters!",
+        });
+      } else {
+        let appointment = await db.Booking.findOne({
+          where: {
+            doctorID: data.doctorID,
+            patientID: data.patientID,
+            timeType: data.timeType,
+            statusID: "S1",
+          },
+          include: [
+            {
+              model: db.User,
+              as: "patientData",
+              attributes: ["email", "firstName"],
+            },
+            {
+              model: db.User,
+              as: "doctorData",
+              attributes: ["firstName", "lastName"],
+            },
+          ],
+          raw: false,
+          nest: true,
+        });
+
+        if (appointment) {
+          appointment.statusID = "S2";
+          await appointment.save();
+
+          // FE đã build đầy đủ rồi -> backend chỉ dùng lại
+          await emailService.sendSimpleEmail({
+            reciverEmail: data.email || appointment.patientData.email,
+            patientName: appointment.patientData.firstName,
+            time: data.timeString, // lấy từ FE
+            doctorName: data.doctorName, // lấy từ FE
+            petName: data.petName, // lấy từ FE
+            language: data.language || "vi",
+            redirectLink: "",
+          });
+
+          resolve({
+            errCode: 0,
+            errMessage: "Approved & email sent!",
+          });
+        } else {
+          resolve({
+            errCode: 2,
+            errMessage: "Appointment not found!",
+          });
+        }
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
+let rejectBooking = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!data.doctorID || !data.patientID || !data.timeType) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required parameters!",
+        });
+      } else {
+        let appointment = await db.Booking.findOne({
+          where: {
+            doctorID: data.doctorID,
+            patientID: data.patientID,
+            timeType: data.timeType,
+            statusID: "S1",
+          },
+          include: [
+            {
+              model: db.User,
+              as: "patientData",
+              attributes: ["email", "firstName"],
+            },
+            {
+              model: db.User,
+              as: "doctorData",
+              attributes: ["firstName", "lastName"],
+            },
+          ],
+          raw: false,
+          nest: true,
+        });
+
+        if (appointment) {
+          appointment.statusID = "S4";
+          await appointment.save();
+
+          // FE đã build đầy đủ rồi -> backend chỉ dùng lại
+          await emailService.sendCancelEmail({
+            reciverEmail: data.email || appointment.patientData.email,
+            patientName: appointment.patientData.firstName,
+            time: data.timeString, // lấy từ FE
+            doctorName: data.doctorName, // lấy từ FE
+            petName: data.petName, // lấy từ FE
+            language: data.language || "vi",
+            redirectLink: "",
+          });
+
+          resolve({
+            errCode: 0,
+            errMessage: "Reject & email cancel sent!",
+          });
+        } else {
+          resolve({
+            errCode: 2,
+            errMessage: "Appointment not found!",
+          });
+        }
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
 
 let getListPatientForDoctor = (doctorID, date) => {
   return new Promise(async (resolve, reject) => {
@@ -716,22 +845,6 @@ let getApprovedDoctorsList = async () => {
   }
 };
 
-// let getRejectedDoctors = async () => {
-//   try {
-//     let doctors = await db.User.findAll({
-//       where: { roleId: "R2", status: "REJECTED" },
-//       attributes: { exclude: ["password"] },
-//     });
-
-//     return {
-//       errCode: 0,
-//       data: doctors,
-//     };
-//   } catch (e) {
-//     throw e;
-//   }
-// };
-
 let activateDoctor = async (doctorId) => {
   try {
     let doctor = await db.User.findOne({
@@ -760,6 +873,70 @@ let activateDoctor = async (doctorId) => {
   }
 };
 
+let getDoctorByIdService = (doctorId) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!doctorId) {
+        resolve({
+          errCode: 1,
+          errMessage: "Missing required parameter!",
+        });
+      } else {
+        let doctor = await db.User.findOne({
+          where: { id: doctorId },
+          attributes: [
+            "id",
+            "email",
+            "firstName",
+            "lastName",
+            "address",
+            "phoneNumber",
+            "gender",
+            "image",
+            "positionId",
+            "university",
+            "expectation",
+            "specialtyId",
+          ],
+          include: [
+            {
+              model: db.Specialty,
+              as: "specialtyData",
+              attributes: ["id", "name"],
+            },
+            {
+              model: db.Allcode,
+              as: "positionData",
+              attributes: ["valueEN", "valueVI"],
+            },
+            {
+              model: db.Allcode,
+              as: "genderData",
+              attributes: ["valueEN", "valueVI"],
+            },
+          ],
+          raw: false,
+          nest: true,
+        });
+
+        if (doctor && doctor.image) {
+          doctor.image = new Buffer(doctor.image, "base64").toString("binary");
+        }
+
+        if (!doctor) doctor = {};
+
+        resolve({
+          errCode: 0,
+          errMessage: "OK",
+          data: doctor,
+        });
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -778,4 +955,8 @@ module.exports = {
   // getRejectedDoctors,
   activateDoctor,
   sendInterviewEmail,
+  getDoctorByIdService,
+  approveBooking,
+  getListNewBookingForDoctor,
+  rejectBooking,
 };

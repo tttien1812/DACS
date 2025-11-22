@@ -124,6 +124,9 @@ let createNewUser = (data) => {
           gender: data.gender,
           roleId: data.roleId,
           positionId: data.positionId,
+          specialtyId: data.specialtyId || null,
+          university: data.university,
+          expectation: data.expectation,
           image: data.avatar,
           status: data.roleId === "R2" ? "PENDING" : "ACTIVE",
         });
