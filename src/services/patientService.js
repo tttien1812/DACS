@@ -10,9 +10,74 @@ let buildUrlEmail = (doctorID, token) => {
   return result;
 };
 
+// let postBookAppointment = (data) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (
+//         !data.email ||
+//         !data.doctorID ||
+//         !data.timeType ||
+//         !data.date ||
+//         !data.fullname ||
+//         !data.selectedGender ||
+//         !data.address
+//       ) {
+//         resolve({
+//           errCode: 1,
+//           errMessage: "Missing required Parameter!",
+//         });
+//       } else {
+//         let token = uuidv4();
+
+//         //upsert patient
+//         let [user] = await db.User.findOrCreate({
+//           where: { email: data.email },
+//           defaults: {
+//             email: data.email,
+//             roleId: "R3",
+//             gender: data.selectedGender,
+//             address: data.address,
+//             firstName: data.fullname,
+//             //fix theem animal sua lai model user
+//           },
+//         });
+
+//         //create a booking record
+//         if (user[0]) {
+//           await db.Booking.findOrCreate({
+//             where: {
+//               patientID: user[0].id,
+//               doctorID: data.doctorID,
+//               date: data.date,
+//               timeType: data.timeType,
+//             },
+//             defaults: {
+//               statusID: "S1",
+//               doctorID: data.doctorID,
+//               patientID: user[0].id,
+//               date: data.date,
+//               timeType: data.timeType,
+//               token: token,
+//               animal: data.animal,
+//             },
+//           });
+//         }
+
+//         resolve({
+//           errCode: 0,
+//           errMessage: "Save infor succeed",
+//         });
+//       }
+//     } catch (e) {
+//       reject(e);
+//     }
+//   });
+// };
+
 let postBookAppointment = (data) => {
   return new Promise(async (resolve, reject) => {
     try {
+      // ===================== CHECK REQUIRED BOOKING FIELDS =====================
       if (
         !data.email ||
         !data.doctorID ||
@@ -20,55 +85,69 @@ let postBookAppointment = (data) => {
         !data.date ||
         !data.fullname ||
         !data.selectedGender ||
-        !data.address ||
-        !data.animal
+        !data.address
       ) {
-        resolve({
+        return resolve({
           errCode: 1,
-          errMessage: "Missing required Parameter!",
-        });
-      } else {
-        let token = uuidv4();
-
-        //upsert patient
-        let user = await db.User.findOrCreate({
-          where: { email: data.email },
-          defaults: {
-            email: data.email,
-            roleId: "R3",
-            gender: data.selectedGender,
-            address: data.address,
-            firstName: data.fullname,
-            //fix theem animal sua lai model user
-          },
-        });
-
-        //create a booking record
-        if (user[0]) {
-          await db.Booking.findOrCreate({
-            where: {
-              patientID: user[0].id,
-              doctorID: data.doctorID,
-              date: data.date,
-              timeType: data.timeType,
-            },
-            defaults: {
-              statusID: "S1",
-              doctorID: data.doctorID,
-              patientID: user[0].id,
-              date: data.date,
-              timeType: data.timeType,
-              token: token,
-              animal: data.animal,
-            },
-          });
-        }
-
-        resolve({
-          errCode: 0,
-          errMessage: "Save infor succeed",
+          errMessage: "Missing required booking fields",
         });
       }
+
+      // ===================== UPSERT USER =====================
+      let [user] = await db.User.findOrCreate({
+        where: { email: data.email },
+        defaults: {
+          email: data.email,
+          roleId: "R3",
+          gender: data.selectedGender,
+          address: data.address,
+          firstName: data.fullname,
+          phoneNumber: data.phoneNumber,
+        },
+      });
+
+      // ===================== CREATE PET IF PROVIDED =====================
+      let petId = null;
+
+      if (data.pet) {
+        if (data.pet.id) {
+          // dùng pet đã tồn tại
+          petId = data.pet.id;
+        } else {
+          // tạo pet mới
+          let newPet = await db.Pet.create({
+            name: data.pet.name,
+            species: data.pet.species,
+            breed: data.pet.breed,
+            birthday: data.pet.birthday,
+            weight: data.pet.weight,
+            gender: data.pet.gender,
+            status: data.pet.status || "active",
+            ownerId: user.id,
+          });
+
+          petId = newPet.id;
+        }
+      }
+
+      // ===================== CREATE BOOKING =====================
+      let token = uuidv4();
+
+      await db.Booking.create({
+        statusID: "S1",
+        doctorID: data.doctorID,
+        patientID: user.id,
+        petId: petId,
+        date: data.date,
+        timeType: data.timeType,
+        token: token,
+        reason: data.reason,
+      });
+
+      return resolve({
+        errCode: 0,
+        errMessage: "Booking & Pet saved!",
+      });
     } catch (e) {
       reject(e);
     }

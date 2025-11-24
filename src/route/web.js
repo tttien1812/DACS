@@ -8,6 +8,7 @@ import clinicController from "../controllers/clinicController";
 import handbookController from "../controllers/handbookController";
 import aiController from "../controllers/aiController";
 import orderController from "../controllers/orderController";
+import petController from "../controllers/petController";
 
 let router = express.Router();
 
@@ -134,6 +135,15 @@ let initWebRoutes = (app) => {
   router.post("/api/ask", aiController.handleAskAI);
 
   router.post("/api/order", orderController.createOrder);
+
+  // Pet Profile
+  router.post("/api/create-pet", petController.handleCreatePet);
+  router.put("/api/update-pet", petController.handleUpdatePet);
+  router.delete("/api/delete-pet", petController.handleDeletePet);
+
+  router.get("/api/get-pets-by-email", petController.handleGetPetsByUser);
+  router.get("/api/get-pet-detail", petController.handleGetPetDetail);
+  router.get("/api/allpetcode", petController.handleGetAllCodes);
 
   return app.use("/", router);
 };

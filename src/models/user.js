@@ -37,6 +37,7 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: "id",
         as: "specialtyData",
       });
+      User.hasMany(models.Pet, { foreignKey: "ownerId", as: "petList" });
     }
   }
   User.init(

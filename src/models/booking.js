@@ -32,6 +32,8 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: "keyMap",
         as: "statusData",
       });
+
+      Booking.belongsTo(models.Pet, { foreignKey: "petId", as: "petData" });
     }
   }
   Booking.init(
@@ -43,6 +45,8 @@ module.exports = (sequelize, DataTypes) => {
       timeType: DataTypes.STRING,
       token: DataTypes.STRING,
       animal: DataTypes.STRING,
+      petId: DataTypes.INTEGER,
+      reason: DataTypes.STRING,
     },
     {
       sequelize,
