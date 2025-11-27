@@ -626,61 +626,134 @@ let rejectBooking = (data) => {
   });
 };
 
+// let getListPatientForDoctor = (doctorID, date) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (!doctorID || !date) {
+//         resolve({
+//           errCode: 1,
+//           errMessage: "Missing required parameters!",
+//         });
+//       } else {
+//         // Chuyển timestamp thành dạng ngày bắt đầu và kết thúc trong ngày đó
+//         let startOfDay = new Date(+date);
+//         startOfDay.setHours(0, 0, 0, 0);
+
+//         let endOfDay = new Date(+date);
+//         endOfDay.setHours(23, 59, 59, 999);
+
+//         let data = await db.Booking.findAll({
+//           where: {
+//             statusID: "S2",
+//             doctorID: doctorID,
+//             patientID: patientID,
+//             petId: petId,
+//             reason: reason,
+//             date: date,
+//           },
+//           include: [
+//             {
+//               model: db.User,
+//               as: "patientData",
+//               attributes: ["email", "firstName", "gender", "address"],
+
+//               include: [
+//                 {
+//                   model: db.Allcode,
+//                   as: "genderData",
+//                   attributes: ["valueEN", "valueVI"],
+//                 },
+//               ],
+//             },
+//             {
+//               model: db.Allcode,
+//               as: "timeTypeDataPatient",
+//               attributes: ["valueEN", "valueVI"],
+//             },
+//           ],
+//           raw: false,
+//           nest: true,
+//         });
+
+//         resolve({
+//           errCode: 0,
+//           data: data,
+//         });
+//       }
+//     } catch (e) {
+//       reject(e);
+//     }
+//   });
+// };
+
 let getListPatientForDoctor = (doctorID, date) => {
   return new Promise(async (resolve, reject) => {
     try {
       if (!doctorID || !date) {
-        resolve({
+        return resolve({
           errCode: 1,
           errMessage: "Missing required parameters!",
         });
-      } else {
-        // Chuyển timestamp thành dạng ngày bắt đầu và kết thúc trong ngày đó
-        let startOfDay = new Date(+date);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        let endOfDay = new Date(+date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        let data = await db.Booking.findAll({
-          where: {
-            statusID: "S2",
-            doctorID: doctorID,
-            // date: {
-            //   [Op.between]: [startOfDay, endOfDay],
-            // },
-            date: date,
-          },
-          include: [
-            {
-              model: db.User,
-              as: "patientData",
-              attributes: ["email", "firstName", "gender", "address"],
-
-              include: [
-                {
-                  model: db.Allcode,
-                  as: "genderData",
-                  attributes: ["valueEN", "valueVI"],
-                },
-              ],
-            },
-            {
-              model: db.Allcode,
-              as: "timeTypeDataPatient",
-              attributes: ["valueEN", "valueVI"],
-            },
-          ],
-          raw: false,
-          nest: true,
-        });
-
-        resolve({
-          errCode: 0,
-          data: data,
-        });
       }
+
+      let data = await db.Booking.findAll({
+        where: {
+          statusID: "S2",
+          doctorID: doctorID,
+          date: date,
+        },
+        include: [
+          {
+            model: db.User,
+            as: "patientData",
+            attributes: [
+              "id",
+              "email",
+              "firstName",
+              "gender",
+              "address",
+              "phoneNumber",
+            ],
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+
+          // LẤY PET CHO BÁC SĨ HÃY CHÚ Ý
+          {
+            model: db.Pet,
+            as: "petData",
+            attributes: [
+              "name",
+              "species",
+              "breed",
+              "ownerId",
+              "weight",
+              "gender",
+              "birthday",
+            ],
+          },
+
+          {
+            model: db.Allcode,
+            as: "timeTypeDataPatient",
+            attributes: ["valueEN", "valueVI"],
+          },
+        ],
+        raw: false,
+        nest: true,
+      });
+
+      return resolve({
+        errCode: 0,
+        data: data,
+      });
     } catch (e) {
+      console.log(e);
       reject(e);
     }
   });

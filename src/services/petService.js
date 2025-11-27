@@ -131,6 +131,13 @@ let getPetDetail = (petId) => {
             as: "ageData",
             attributes: ["keyMap", "valueEN", "valueVI"],
           },
+          {
+            model: db.Booking,
+            as: "petBookings",
+            attributes: ["id", "reason", "date", "timeType", "statusID"],
+            limit: 1,
+            order: [["createdAt", "DESC"]],
+          },
         ],
         raw: false,
         nest: true,
@@ -247,6 +254,25 @@ let getAllCodes = (type) => {
   });
 };
 
+let getPetsByUser = async (ownerId) => {
+  try {
+    if (!ownerId) return { errCode: 1, errMessage: "Missing userId" };
+
+    let pets = await db.Pet.findAll({
+      where: { ownerId: ownerId, isPrescribed: 0 },
+      raw: true,
+    });
+
+    return {
+      errCode: 0,
+      data: pets,
+    };
+  } catch (e) {
+    console.log(e);
+    return { errCode: -1, errMessage: "Server error" };
+  }
+};
+
 module.exports = {
   createNewPet,
   updatePetData,
@@ -254,4 +280,5 @@ module.exports = {
   getPetDetail,
   getPetsByEmail,
   getAllCodes,
+  getPetsByUser,
 };

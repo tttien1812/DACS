@@ -46,17 +46,17 @@ let handleGetPetsByUser = async (req, res) => {
 };
 
 let handleGetPetDetail = async (req, res) => {
-  let id = req.query.id;
-
-  if (!id) {
-    return res.status(200).json({
-      errCode: 1,
-      errMessage: "Missing required parameter: id",
+  try {
+    let petId = req.query.petId;
+    let response = await petService.getPetDetail(petId);
+    return res.status(200).json(response);
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Server error",
     });
   }
-
-  let detail = await petService.getPetDetail(id);
-  return res.status(200).json(detail);
 };
 
 let handleGetAllCodes = async (req, res) => {
@@ -75,6 +75,14 @@ let handleGetAllCodes = async (req, res) => {
   }
 };
 
+let getPetsByUser = async (req, res) => {
+  let ownerId = req.query.ownerId;
+
+  let result = await petService.getPetsByUser(ownerId);
+
+  return res.status(200).json(result);
+};
+
 module.exports = {
   handleCreatePet,
   handleUpdatePet,
@@ -82,4 +90,5 @@ module.exports = {
   handleGetPetsByUser,
   handleGetPetDetail,
   handleGetAllCodes,
+  getPetsByUser,
 };

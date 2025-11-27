@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
       Pet.belongsTo(models.User, { foreignKey: "ownerId", as: "owner" });
 
       // Một Pet có thể có nhiều Booking
-      Pet.hasMany(models.Booking, { foreignKey: "petId" });
+      Pet.hasMany(models.Booking, { foreignKey: "petId", as: "petBookings" });
 
       Pet.belongsTo(models.Allcode, {
         foreignKey: "species",
@@ -45,6 +45,10 @@ module.exports = (sequelize, DataTypes) => {
       gender: DataTypes.STRING,
       status: DataTypes.STRING,
       ownerId: DataTypes.INTEGER,
+      isPrescribed: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+      },
     },
     {
       sequelize,
