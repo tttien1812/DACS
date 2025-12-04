@@ -45,6 +45,7 @@ module.exports = (sequelize, DataTypes) => {
       gender: DataTypes.STRING,
       status: DataTypes.STRING,
       ownerId: DataTypes.INTEGER,
+      image: DataTypes.STRING,
       isPrescribed: {
         type: DataTypes.INTEGER,
         defaultValue: 0,

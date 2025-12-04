@@ -34,6 +34,16 @@ module.exports = (sequelize, DataTypes) => {
       });
 
       Booking.belongsTo(models.Pet, { foreignKey: "petId", as: "petData" });
+
+      Booking.hasOne(models.ZaloPayPayment, {
+        foreignKey: "bookingId",
+        as: "paymentData",
+      });
+
+      Booking.hasOne(models.Invoice, {
+        foreignKey: "bookingId",
+        as: "invoiceData",
+      });
     }
   }
   Booking.init(

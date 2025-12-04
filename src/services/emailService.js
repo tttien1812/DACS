@@ -147,7 +147,7 @@ let sendAttachment = async (dataSend) => {
           {
             filename: `remedy-${
               dataSend.patientID
-            }-${new Date().getTime()}.png`,
+            }-${new Date().getTime()}.pdf`,
             content: dataSend.imgBase64.split("base64,")[1],
             encoding: "base64",
           },

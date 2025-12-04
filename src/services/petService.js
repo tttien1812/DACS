@@ -60,6 +60,10 @@ let updatePetData = (data) => {
         pet.gender = data.gender;
         pet.status = data.status;
 
+        if (data.image) {
+          pet.image = data.image;
+        }
+
         await pet.save();
 
         resolve({
@@ -212,6 +216,11 @@ let getPetsByEmail = (email) => {
             as: "owner",
             attributes: ["email", "firstName", "lastName", "phoneNumber"],
           },
+          {
+            model: db.Booking,
+            as: "petBookings",
+            attributes: ["id", "reason", "statusID"],
+          },
         ],
         raw: false,
         nest: true,
@@ -260,6 +269,16 @@ let getPetsByUser = async (ownerId) => {
 
     let pets = await db.Pet.findAll({
       where: { ownerId: ownerId, isPrescribed: 0 },
+      include: [
+        {
+          model: db.Booking,
+          as: "petBookings",
+          where: {
+            statusId: "S2",
+          },
+          required: true,
+        },
+      ],
       raw: true,
     });
 
@@ -273,6 +292,33 @@ let getPetsByUser = async (ownerId) => {
   }
 };
 
+let getPrescribedPetsService = () => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const pets = await db.Pet.findAll({
+        where: { isPrescribed: 1 },
+        include: [
+          {
+            model: db.User,
+            as: "owner",
+            attributes: ["id", "firstName", "lastName", "email", "phoneNumber"],
+          },
+        ],
+        raw: false,
+        nest: true,
+      });
+
+      resolve({
+        errCode: 0,
+        message: "OK",
+        data: pets,
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   createNewPet,
   updatePetData,
@@ -281,4 +327,5 @@ module.exports = {
   getPetsByEmail,
   getAllCodes,
   getPetsByUser,
+  getPrescribedPetsService,
 };

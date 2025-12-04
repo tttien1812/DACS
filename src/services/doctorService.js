@@ -3,6 +3,7 @@ require("dotenv").config();
 import _ from "lodash";
 import emailService from "../services/emailService";
 import { Op } from "sequelize";
+const Sequelize = require("sequelize");
 
 const MAX_NUMBER_SCHEDULE = process.env.MAX_NUMBER_SCHEDULE;
 
@@ -365,6 +366,7 @@ let getExtraInforDoctorById = (idInput) => {
         });
 
         if (!data) data = {};
+
         resolve({
           errCode: 0,
           data: data,
@@ -404,6 +406,7 @@ let getProfileDoctorById = (inputId) => {
             },
             {
               model: db.Doctor_Infor,
+              as: "doctorInfo",
               attributes: {
                 exclude: ["id", "doctorID"],
               },

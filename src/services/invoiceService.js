@@ -26,6 +26,7 @@ let createInvoiceService = async (data) => {
         userId: data.userId,
         petId: data.petId,
         doctorId: data.doctorId,
+        bookingId: data.bookingId,
         note: data.note || "",
         totalPrice: totalPrice,
         paymentStatus: "pending",
@@ -76,6 +77,111 @@ let createInvoiceService = async (data) => {
   }
 };
 
+let getInvoiceByBookingId = (bookingId) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // 1. Lấy booking
+      let booking = await db.Booking.findOne({
+        where: { id: bookingId },
+      });
+
+      console.log(">>> DEBUG: booking =", booking);
+
+      if (!booking) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Booking không tồn tại",
+        });
+      }
+
+      const petId = booking.petId;
+
+      if (!petId) {
+        return resolve({
+          errCode: 2,
+          errMessage: "Booking này chưa có thú cưng",
+        });
+      }
+
+      // 2. Lấy invoice theo petId
+      const invoice = await db.Invoice.findOne({
+        where: { petId: petId },
+        include: [
+          {
+            model: db.User,
+            as: "userData",
+            attributes: ["id", "firstName", "lastName", "phoneNumber", "email"],
+          },
+          {
+            model: db.User,
+            as: "doctorData",
+            attributes: ["id", "firstName", "lastName"],
+
+            include: [
+              {
+                model: db.Doctor_Infor,
+                as: "doctorInfo",
+                attributes: ["id", "priceID"],
+                include: [
+                  {
+                    model: db.Allcode,
+                    as: "priceTypeData",
+                    attributes: ["keyMap", "valueEN", "valueVI"],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            model: db.Pet,
+            as: "petData",
+            attributes: ["id", "name", "species", "breed"],
+            include: [
+              {
+                model: db.Allcode,
+                as: "speciesData",
+                attributes: ["keyMap", "valueEN", "valueVI"],
+              },
+            ],
+          },
+
+          {
+            model: db.InvoiceItem,
+            as: "items",
+            include: [
+              {
+                model: db.Medicine,
+                as: "medicineData",
+                attributes: ["id", "description", "price"],
+              },
+            ],
+          },
+        ],
+        order: [[{ model: db.InvoiceItem, as: "items" }, "id", "ASC"]],
+        raw: false,
+        nest: true,
+      });
+
+      if (!invoice) {
+        return resolve({
+          errCode: 3,
+          errMessage: "Không tìm thấy hóa đơn nào của thú cưng này",
+        });
+      }
+
+      return resolve({
+        errCode: 0,
+        errMessage: "OK",
+        data: invoice,
+      });
+    } catch (e) {
+      console.log(">>> SERVER ERROR:", e);
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   createInvoiceService,
+  getInvoiceByBookingId,
 };

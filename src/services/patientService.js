@@ -307,7 +307,7 @@ let getBookingStatusByEmail = (email) => {
           {
             model: db.User,
             as: "patientData",
-            attributes: ["email", "firstName", "gender", "address"],
+            attributes: ["id", "email", "firstName", "gender", "address"],
 
             include: [
               {
@@ -326,6 +326,12 @@ let getBookingStatusByEmail = (email) => {
             model: db.Allcode,
             as: "statusData",
             attributes: ["valueEN", "valueVI"],
+          },
+          {
+            model: db.ZaloPayPayment,
+            as: "paymentData",
+            attributes: ["status"],
+            required: false,
           },
         ],
         raw: true,

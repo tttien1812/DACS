@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       // định danh các mối quan hệ
       Doctor_Infor.belongsTo(models.User, {
         foreignKey: "doctorID",
+        as: "doctorInfo",
       });
       Doctor_Infor.belongsTo(models.Allcode, {
         foreignKey: "priceID",

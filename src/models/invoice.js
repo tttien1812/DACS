@@ -30,6 +30,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "invoiceId",
         as: "items",
       });
+
+      Invoice.belongsTo(models.Booking, {
+        foreignKey: "bookingId",
+        targetKey: "id",
+        as: "bookingData",
+      });
     }
   }
 
@@ -38,6 +44,7 @@ module.exports = (sequelize, DataTypes) => {
       userId: DataTypes.INTEGER,
       petId: DataTypes.INTEGER,
       doctorId: DataTypes.INTEGER,
+      bookingId: DataTypes.INTEGER,
 
       totalPrice: {
         type: DataTypes.FLOAT,

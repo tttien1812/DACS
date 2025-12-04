@@ -11,6 +11,7 @@ import orderController from "../controllers/orderController";
 import petController from "../controllers/petController";
 import medicineController from "../controllers/medicineController";
 import invoiceController from "../controllers/invoiceController";
+import zaloPayController from "../controllers/zaloPayController";
 
 let router = express.Router();
 
@@ -136,7 +137,26 @@ let initWebRoutes = (app) => {
   //AI
   router.post("/api/ask", aiController.handleAskAI);
 
+  //zalopay
   router.post("/api/order", orderController.createOrder);
+  router.get("/api/payment-status", orderController.getPaymentStatus);
+  router.post("/api/fake-callback", orderController.fakeCallback);
+  router.get(
+    "/api/get-zalopay-by-booking",
+    zaloPayController.handleGetZaloPayByBookingId
+  );
+  router.get(
+    "/api/get-booking-reason",
+    zaloPayController.handleGetBookingReason
+  );
+  router.get(
+    "/api/calculate-final-bill",
+    zaloPayController.handleCalculateFinalBill
+  );
+  router.get(
+    "/api/final-bill",
+    zaloPayController.handleGetFinalBillByBookingId
+  );
 
   // Pet Profile
   router.post("/api/create-pet", petController.handleCreatePet);
@@ -147,12 +167,17 @@ let initWebRoutes = (app) => {
   router.get("/api/get-pet-detail", petController.handleGetPetDetail);
   router.get("/api/allpetcode", petController.handleGetAllCodes);
   router.get("/api/get-pets-by-user", petController.getPetsByUser);
+  router.get("/api/pets/prescribed", petController.getPrescribedPets);
 
   //Medicine
   router.get("/api/medicines", medicineController.getMedicines);
 
   //invoice
   router.post("/api/invoice/create", invoiceController.createInvoice);
+  router.get(
+    "/api/get-invoice-by-booking",
+    invoiceController.handleGetInvoiceByBooking
+  );
 
   return app.use("/", router);
 };

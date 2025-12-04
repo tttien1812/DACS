@@ -289,168 +289,284 @@
 //   handleAskAI,
 // };
 
+//----------------------------------------------------------------------------
+
+// import db from "../models/index.js";
+// import axios from "axios";
+
+// // ======================
+// // CACHE — 60s
+// // ======================
+// const aiCache = new Map();
+// const CACHE_TTL = 60000;
+
+// function getCache(key) {
+//   const c = aiCache.get(key);
+//   if (!c) return null;
+//   if (Date.now() - c.time < CACHE_TTL) return c.data;
+//   aiCache.delete(key);
+//   return null;
+// }
+
+// function setCache(key, data) {
+//   aiCache.set(key, { data, time: Date.now() });
+// }
+
+// // ======================
+// // THROTTLE — 250ms
+// // ======================
+// let lastCall = 0;
+// const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// async function throttle() {
+//   const now = Date.now();
+//   const diff = now - lastCall;
+//   if (diff < 250) await wait(250 - diff);
+//   lastCall = Date.now();
+// }
+
+// // ======================
+// // TIMEOUT WRAPPER — 10s
+// // ======================
+// function withTimeout(promise, ms = 10000) {
+//   return Promise.race([
+//     promise,
+//     new Promise((_, reject) =>
+//       setTimeout(() => reject(new Error("TIMEOUT")), ms)
+//     ),
+//   ]);
+// }
+
+// // ==================================================================
+// //                           MAIN FUNCTION
+// // ==================================================================
+
+// const handleAskAI = async (question) => {
+//   try {
+//     const cleanQ = question.trim();
+
+//     // 1) CACHE CHECK
+//     const cached = getCache(cleanQ);
+//     if (cached) return cached;
+
+//     await throttle();
+
+//     // 2) Phân loại câu hỏi liên quan bác sĩ/chuyên khoa
+//     const keywords = ["bác sĩ", "chuyên khoa", "khám", "thú y"];
+//     const isDoctorQuestion = keywords.some((kw) =>
+//       cleanQ.toLowerCase().includes(kw)
+//     );
+
+//     let extraContext = "";
+
+//     if (isDoctorQuestion) {
+//       const specialties = await db.Specialty.findAll({
+//         attributes: ["id", "name"],
+//         raw: true,
+//       });
+
+//       let match = specialties.find((s) =>
+//         cleanQ.toLowerCase().includes(s.name.toLowerCase())
+//       );
+
+//       if (match) {
+//         const doctors = await db.Doctor_Infor.findAll({
+//           where: { specialtyID: match.id },
+//           include: [
+//             {
+//               model: db.User,
+//               attributes: [
+//                 "firstName",
+//                 "lastName",
+//                 "phoneNumber",
+//                 "address",
+//                 "gender",
+//               ],
+//             },
+//           ],
+//           raw: true,
+//           nest: true,
+//           limit: 5,
+//         });
+
+//         if (doctors.length > 0) {
+//           extraContext =
+//             `Danh sách bác sĩ thuộc chuyên khoa "${match.name}":\n` +
+//             doctors
+//               .map(
+//                 (d) =>
+//                   `- Bác sĩ ${d.User.lastName} ${d.User.firstName} | ` +
+//                   `Giới tính: ${d.User.gender === "M" ? "Nam" : "Nữ"} | ` +
+//                   `SĐT: ${d.User.phoneNumber ?? "Không có"} | ` +
+//                   `Địa chỉ: ${d.User.address ?? "Không rõ"}`
+//               )
+//               .join("\n");
+//         } else {
+//           extraContext = `Không có bác sĩ nào thuộc chuyên khoa "${match.name}".`;
+//         }
+//       }
+//     }
+
+//     // 3) Prompt tối ưu cho model 1B (ngắn – hiệu quả)
+//     // const prompt = extraContext
+//     //   ? `Bạn là trợ lý AI thú y.\n${extraContext}\nCâu hỏi: "${cleanQ}"\nTrả lời ngắn gọn bằng tiếng Việt.`
+//     //   : `Bạn là trợ lý AI. Trả lời thật ngắn gọn bằng tiếng Việt:\n"${cleanQ}"`;
+
+//     const prompt = extraContext
+//       ? `Bạn là trợ lý AI hệ thống quản lý phòng khám thú y.
+// Nhiệm vụ của bạn: trả lời câu hỏi dựa trên dữ liệu có sẵn, không đưa lời khuyên y tế hay lời từ chối trách nhiệm.
+// Nếu người dùng hỏi về bác sĩ, hãy trả lời bằng danh sách bác sĩ phù hợp trong dữ liệu sau:
+
+// ${extraContext}
+
+// Câu hỏi: "${cleanQ}"
+
+// Trả lời trực tiếp bằng tiếng Việt, không từ chối, không cảnh báo chung, không đưa ra lời khuyên điều trị.`
+//       : `Bạn là trợ lý AI hệ thống. Trả lời ngắn gọn bằng tiếng Việt:\n"${cleanQ}"`;
+
+//     // 4) Gọi Ollama
+//     const response = await withTimeout(
+//       axios.post("http://localhost:11434/api/generate", {
+//         model: "llama3.2:1b",
+//         prompt: prompt,
+//         stream: false,
+//       }),
+//       10000
+//     );
+
+//     console.log("Ollama response:", response.data);
+
+//     const text = response.data?.response ?? "AI không trả lời.";
+
+//     // 5) Lưu cache
+//     setCache(cleanQ, text);
+
+//     return text;
+//   } catch (err) {
+//     console.error("AI ERROR:", err.message);
+
+//     if (err.message === "TIMEOUT") {
+//       return "AI phản hồi chậm, vui lòng thử lại.";
+//     }
+
+//     return "Xin lỗi, hệ thống AI hiện đang gặp sự cố.";
+//   }
+// };
+
+// export default {
+//   handleAskAI,
+// };
+
+//----------------------------------------------------------------------------
 import db from "../models/index.js";
 import axios from "axios";
 
-// ======================
-// CACHE — 60s
-// ======================
-const aiCache = new Map();
-const CACHE_TTL = 60000;
-
-function getCache(key) {
-  const c = aiCache.get(key);
-  if (!c) return null;
-  if (Date.now() - c.time < CACHE_TTL) return c.data;
-  aiCache.delete(key);
-  return null;
-}
-
-function setCache(key, data) {
-  aiCache.set(key, { data, time: Date.now() });
-}
-
-// ======================
-// THROTTLE — 250ms
-// ======================
-let lastCall = 0;
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function throttle() {
-  const now = Date.now();
-  const diff = now - lastCall;
-  if (diff < 250) await wait(250 - diff);
-  lastCall = Date.now();
-}
-
-// ======================
-// TIMEOUT WRAPPER — 10s
-// ======================
-function withTimeout(promise, ms = 10000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("TIMEOUT")), ms)
-    ),
-  ]);
-}
-
-// ==================================================================
-//                           MAIN FUNCTION
-// ==================================================================
-
-const handleAskAI = async (question) => {
-  try {
-    const cleanQ = question.trim();
-
-    // 1) CACHE CHECK
-    const cached = getCache(cleanQ);
-    if (cached) return cached;
-
-    await throttle();
-
-    // 2) Phân loại câu hỏi liên quan bác sĩ/chuyên khoa
-    const keywords = ["bác sĩ", "chuyên khoa", "khám", "thú y"];
-    const isDoctorQuestion = keywords.some((kw) =>
-      cleanQ.toLowerCase().includes(kw)
-    );
-
-    let extraContext = "";
-
-    if (isDoctorQuestion) {
-      const specialties = await db.Specialty.findAll({
-        attributes: ["id", "name"],
-        raw: true,
-      });
-
-      let match = specialties.find((s) =>
-        cleanQ.toLowerCase().includes(s.name.toLowerCase())
+const aiService = {
+  handleAskAI: async (question, res) => {
+    try {
+      // ------ Tạo Context RAG từ Database ------
+      const keywords = ["bác sĩ", "chuyên khoa", "khám", "thú y"];
+      const isDoctor = keywords.some((kw) =>
+        question.toLowerCase().includes(kw)
       );
+      let extraContext = "";
 
-      if (match) {
-        const doctors = await db.Doctor_Infor.findAll({
-          where: { specialtyID: match.id },
-          include: [
-            {
-              model: db.User,
-              attributes: [
-                "firstName",
-                "lastName",
-                "phoneNumber",
-                "address",
-                "gender",
-              ],
-            },
-          ],
+      if (isDoctor) {
+        const specialties = await db.Specialty.findAll({
+          attributes: ["id", "name"],
           raw: true,
-          nest: true,
-          limit: 5,
         });
 
-        if (doctors.length > 0) {
-          extraContext =
-            `Danh sách bác sĩ thuộc chuyên khoa "${match.name}":\n` +
-            doctors
-              .map(
-                (d) =>
-                  `- Bác sĩ ${d.User.lastName} ${d.User.firstName} | ` +
-                  `Giới tính: ${d.User.gender === "M" ? "Nam" : "Nữ"} | ` +
-                  `SĐT: ${d.User.phoneNumber ?? "Không có"} | ` +
-                  `Địa chỉ: ${d.User.address ?? "Không rõ"}`
-              )
-              .join("\n");
-        } else {
-          extraContext = `Không có bác sĩ nào thuộc chuyên khoa "${match.name}".`;
+        const match = specialties.find((s) =>
+          question.toLowerCase().includes(s.name.toLowerCase())
+        );
+
+        if (match) {
+          const doctors = await db.Doctor_Infor.findAll({
+            where: { specialtyID: match.id },
+            include: [
+              {
+                model: db.User,
+                as: "doctorInfo",
+                attributes: [
+                  "firstName",
+                  "lastName",
+                  "phoneNumber",
+                  "address",
+                  "gender",
+                ],
+              },
+            ],
+            raw: true,
+            nest: true,
+          });
+
+          extraContext = doctors.length
+            ? doctors
+                .map(
+                  (d) =>
+                    `- BS ${d.doctorInfo.lastName} ${
+                      d.doctorInfo.firstName}
+                     | ${d.doctorInfo.phoneNumber ?? "N/A"} | ${
+                      d.doctorInfo.address ?? "N/A"
+                    }`
+                )
+                .join("\n")
+            : `Không có bác sĩ nào cho chuyên khoa ${match.name}`;
         }
       }
-    }
 
-    // 3) Prompt tối ưu cho model 1B (ngắn – hiệu quả)
-    // const prompt = extraContext
-    //   ? `Bạn là trợ lý AI thú y.\n${extraContext}\nCâu hỏi: "${cleanQ}"\nTrả lời ngắn gọn bằng tiếng Việt.`
-    //   : `Bạn là trợ lý AI. Trả lời thật ngắn gọn bằng tiếng Việt:\n"${cleanQ}"`;
+      //       const prompt = extraContext
+      //         ? `
+      // Thông tin bác sĩ từ database:
+      // ${extraContext}
 
-    const prompt = extraContext
-      ? `Bạn là trợ lý AI hệ thống quản lý phòng khám thú y.
-Nhiệm vụ của bạn: trả lời câu hỏi dựa trên dữ liệu có sẵn, không đưa lời khuyên y tế hay lời từ chối trách nhiệm.
-Nếu người dùng hỏi về bác sĩ, hãy trả lời bằng danh sách bác sĩ phù hợp trong dữ liệu sau:
+      // Câu hỏi: ${question}
+      // Trả lời tiếng Việt rõ ràng, ưu tiên thông tin trong DB.
+      // `
+      //         : `Câu hỏi: ${question}\nTrả lời ngắn gọn tiếng Việt.`;
 
+      const prompt = extraContext
+        ? `Bạn là AI tư vấn thông tin bác sĩ thú y.
+Chỉ được sử dụng dữ liệu trong phần "Dữ liệu bác sĩ" bên dưới để trả lời.
+Tuyệt đối không tự bịa thêm tên, số điện thoại hay thông tin ngoài dữ liệu.
+
+Dữ liệu bác sĩ:
 ${extraContext}
 
-Câu hỏi: "${cleanQ}"
+Yêu cầu: "${question}"
+Trả lời bằng danh sách gọn gàng, đúng thông tin có trong database.
+Nếu dữ liệu không liên quan hoặc không tìm thấy thì hãy nói rõ: "Không có bác sĩ phù hợp trong hệ thống."`
+        : `Bạn là AI trả lời ngắn gọn bằng tiếng Việt.
+Trả lời câu hỏi: "${question}"
+Nếu câu hỏi yêu cầu dữ liệu bác sĩ mà không có context thì yêu cầu người dùng cung cấp chuyên khoa.`;
 
-Trả lời trực tiếp bằng tiếng Việt, không từ chối, không cảnh báo chung, không đưa ra lời khuyên điều trị.`
-      : `Bạn là trợ lý AI hệ thống. Trả lời ngắn gọn bằng tiếng Việt:\n"${cleanQ}"`;
+      // ------ STREAM từ Ollama ------
+      const response = await axios({
+        url: "http://localhost:11434/api/generate",
+        method: "POST",
+        responseType: "stream",
+        data: {
+          model: "phi3:mini", // ⚡ mô hình phù hợp máy bạn
+          prompt,
+          stream: true,
+        },
+      });
 
-    // 4) Gọi Ollama
-    const response = await withTimeout(
-      axios.post("http://localhost:11434/api/generate", {
-        model: "llama3.2:1b",
-        prompt: prompt,
-        stream: false,
-      }),
-      10000
-    );
+      response.data.on("data", (chunk) => {
+        try {
+          const text = JSON.parse(chunk.toString()).response;
+          if (text) res.write(text); // gửi từng đoạn về FE
+        } catch {}
+      });
 
-    console.log("Ollama response:", response.data);
-
-    const text = response.data?.response ?? "AI không trả lời.";
-
-    // 5) Lưu cache
-    setCache(cleanQ, text);
-
-    return text;
-  } catch (err) {
-    console.error("AI ERROR:", err.message);
-
-    if (err.message === "TIMEOUT") {
-      return "AI phản hồi chậm, vui lòng thử lại.";
+      response.data.on("end", () => res.end());
+    } catch (err) {
+      console.log("❌ AI Service ERROR:", err.message);
+      res.write("⚠ AI đang gặp sự cố, thử lại sau.");
+      res.end();
     }
-
-    return "Xin lỗi, hệ thống AI hiện đang gặp sự cố.";
-  }
+  },
 };
 
-export default {
-  handleAskAI,
-};
+export default aiService;
