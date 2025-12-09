@@ -460,111 +460,527 @@
 //----------------------------------------------------------------------------
 import db from "../models/index.js";
 import axios from "axios";
+import moment from "moment";
+
+require("dotenv").config();
+
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 const aiService = {
   handleAskAI: async (question, res) => {
     try {
-      // ------ Tạo Context RAG từ Database ------
-      const keywords = ["bác sĩ", "chuyên khoa", "khám", "thú y"];
-      const isDoctor = keywords.some((kw) =>
-        question.toLowerCase().includes(kw)
-      );
-      let extraContext = "";
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Transfer-Encoding", "chunked");
+      // res.write("🤖 Đang xử lý yêu cầu...\n\n");
 
-      if (isDoctor) {
-        const specialties = await db.Specialty.findAll({
-          attributes: ["id", "name"],
+      if (!question) return res.end("⚠ Vui lòng nhập câu hỏi.");
+
+      //------------------------------------------------------
+      // 1. RAG lấy bác sĩ theo chuyên khoa trong DB
+      //------------------------------------------------------
+      let extraContext = "";
+      let doctorFound = false;
+
+      const specialties = await db.Specialty.findAll({ raw: true });
+
+      const match = specialties.find((s) =>
+        question.toLowerCase().includes(s.name.toLowerCase())
+      );
+
+      if (match) {
+        const doctors = await db.Doctor_Infor.findAll({
+          where: { specialtyID: match.id },
+          include: [
+            {
+              model: db.User,
+              as: "doctorInfo",
+              attributes: [
+                "id",
+                "firstName",
+                "lastName",
+                "phoneNumber",
+                "address",
+              ],
+            },
+          ],
           raw: true,
+          nest: true,
         });
 
-        const match = specialties.find((s) =>
-          question.toLowerCase().includes(s.name.toLowerCase())
-        );
-
-        if (match) {
-          const doctors = await db.Doctor_Infor.findAll({
-            where: { specialtyID: match.id },
-            include: [
-              {
-                model: db.User,
-                as: "doctorInfo",
-                attributes: [
-                  "firstName",
-                  "lastName",
-                  "phoneNumber",
-                  "address",
-                  "gender",
-                ],
-              },
-            ],
-            raw: true,
-            nest: true,
-          });
-
-          extraContext = doctors.length
-            ? doctors
-                .map(
-                  (d) =>
-                    `- BS ${d.doctorInfo.lastName} ${
-                      d.doctorInfo.firstName}
-                     | ${d.doctorInfo.phoneNumber ?? "N/A"} | ${
-                      d.doctorInfo.address ?? "N/A"
-                    }`
-                )
-                .join("\n")
-            : `Không có bác sĩ nào cho chuyên khoa ${match.name}`;
+        if (doctors.length > 0) {
+          doctorFound = true;
+          extraContext = doctors
+            .map((d, index) => {
+              const url = `http://localhost:3000/detail-doctor/${d.doctorInfo.id}`;
+              return (
+                `#${index + 1} Bác sĩ: ${d.doctorInfo.lastName} ${
+                  d.doctorInfo.firstName
+                }\n` +
+                `📍 Địa chỉ: ${d.doctorInfo.address ?? "Không rõ"}\n` +
+                `📞 SĐT: ${d.doctorInfo.phoneNumber ?? "Chưa cập nhật"}\n` +
+                `🔗 Link đặt khám: ${url}\n`
+              );
+            })
+            .join("\n");
+        } else {
+          extraContext = `❗ Không có bác sĩ nào thuộc chuyên khoa ${match.name}.`;
         }
       }
 
-      //       const prompt = extraContext
+      //------------------------------------------------------
+      // 2. Tạo Prompt thông minh
+      //------------------------------------------------------
+      //       let prompt = doctorFound
       //         ? `
-      // Thông tin bác sĩ từ database:
+      // Bạn là AI tư vấn thú y chuyên nghiệp.
+      // Trả lời lịch sự – chỉ dùng dữ liệu bên dưới.
+
+      // Danh sách bác sĩ tìm được:
       // ${extraContext}
 
-      // Câu hỏi: ${question}
-      // Trả lời tiếng Việt rõ ràng, ưu tiên thông tin trong DB.
+      // Yêu cầu khách: "${question}"
+      // Hãy trả lời rõ ràng bằng bullet, KHÔNG bịa thông tin.
       // `
-      //         : `Câu hỏi: ${question}\nTrả lời ngắn gọn tiếng Việt.`;
+      //         : `
+      // Bạn là trợ lý thú y.
+      // Nhiệm vụ:
+      // - Trả lời câu hỏi thông thường.
+      // - Nếu thú cưng bị bệnh/tai nạn -> hướng dẫn sơ cứu & khuyên đến bác sĩ gần nhất.
+      // - Nếu hỏi tìm bác sĩ nhưng không có chuyên khoa -> bảo khách nêu chuyên khoa.
+      // Trả lời tiếng Việt ngắn gọn, dễ hiểu.
 
-      const prompt = extraContext
-        ? `Bạn là AI tư vấn thông tin bác sĩ thú y.
-Chỉ được sử dụng dữ liệu trong phần "Dữ liệu bác sĩ" bên dưới để trả lời.
-Tuyệt đối không tự bịa thêm tên, số điện thoại hay thông tin ngoài dữ liệu.
+      // Câu hỏi: "${question}"
+      // `;
 
-Dữ liệu bác sĩ:
+      //------------------------------------------------------
+      // 2. Tạo Prompt thông minh CHẶT CHẼ HƠN
+      //------------------------------------------------------
+
+      let prompt = "";
+
+      if (doctorFound) {
+        prompt = `
+Bạn là AI tư vấn thú y cho khách hàng.
+Bạn PHẢI trả lời dựa 100% trên dữ liệu bác sĩ bên dưới.
+Nếu người dùng hỏi thêm gì ngoài phạm vi dữ liệu → lịch sự từ chối và gợi ý.
+
+--- DỮ LIỆU BÁC SĨ CHÍNH XÁC ---
 ${extraContext}
+--------------------------------
 
-Yêu cầu: "${question}"
-Trả lời bằng danh sách gọn gàng, đúng thông tin có trong database.
-Nếu dữ liệu không liên quan hoặc không tìm thấy thì hãy nói rõ: "Không có bác sĩ phù hợp trong hệ thống."`
-        : `Bạn là AI trả lời ngắn gọn bằng tiếng Việt.
-Trả lời câu hỏi: "${question}"
-Nếu câu hỏi yêu cầu dữ liệu bác sĩ mà không có context thì yêu cầu người dùng cung cấp chuyên khoa.`;
+Yêu cầu của khách: "${question}"
 
-      // ------ STREAM từ Ollama ------
+Quy tắc trả lời:
+- Trình bày dạng bullet rõ ràng.
+- KHÔNG tự tạo thêm bác sĩ, thông tin, số điện thoại hay địa chỉ ngoài danh sách.
+- Nếu người dùng hỏi về điều không có trong dữ liệu → trả lời "Dữ liệu không có, vui lòng cung cấp chuyên khoa khác".
+- Cuối câu luôn kèm: "Bạn có muốn xem lịch đặt khám không?"
+  `;
+      } else {
+        prompt = `
+Bạn là trợ lý thú y thông minh.
+Mục tiêu của bạn:
+✔ Trả lời tự nhiên các câu xã giao (xin chào, phép tính,…)
+✔ Nếu người dùng hỏi về bệnh/thú cưng → hướng dẫn sơ cứu an toàn từng bước
+✔ Nếu câu hỏi muốn tìm bác sĩ nhưng không có chuyên khoa → yêu cầu cung cấp chuyên khoa
+✔ Không bịa tên bác sĩ nếu không có dữ liệu
+
+Ví dụ hướng dẫn sơ cứu mẫu:
+- Giữ thú cưng cố định
+- Cầm máu bằng gạc sạch
+- Chườm lạnh 10-15 phút
+- Đưa đến thú y sớm nhất
+
+Câu hỏi khách hàng: "${question}"
+Trả lời tiếng Việt tự nhiên, ngắn gọn, không dài dòng.
+`;
+      }
+
+      //------------------------------------------------------
+      // 3. GỌI GROQ STREAM SSE ĐÚNG CÁCH
+      //------------------------------------------------------
+
       const response = await axios({
-        url: "http://localhost:11434/api/generate",
         method: "POST",
+        url: "https://api.groq.com/openai/v1/chat/completions",
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY_CUS}`,
+          "Content-Type": "application/json",
+        },
         responseType: "stream",
         data: {
-          model: "phi3:mini", // ⚡ mô hình phù hợp máy bạn
-          prompt,
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: prompt }],
           stream: true,
         },
       });
 
       response.data.on("data", (chunk) => {
-        try {
-          const text = JSON.parse(chunk.toString()).response;
-          if (text) res.write(text); // gửi từng đoạn về FE
-        } catch {}
+        const lines = chunk.toString().split("\n");
+
+        lines.forEach((line) => {
+          if (line.startsWith("data: ")) {
+            const data = line.replace("data: ", "").trim();
+
+            if (data === "[DONE]") {
+              // res.write("\n\n✔ Hoàn tất tư vấn.");
+              return res.end();
+            }
+
+            try {
+              const json = JSON.parse(data);
+              const content = json.choices?.[0]?.delta?.content;
+
+              if (content) res.write(content);
+            } catch {}
+          }
+        });
+      });
+    } catch (err) {
+      console.error("❌ AI ERROR:", err.message);
+      res.write("\n⚠ Lỗi AI, vui lòng thử lại sau.");
+      return res.end();
+    }
+  },
+
+  // ------------------ BOT LỊCH KHÁM BÁC SĨ - SỬ DỤNG OLLAMA ------------------
+
+  //   handleScheduleBot: async (req, res) => {
+  //     try {
+  //       const { question, doctorId } = req.body;
+
+  //       if (!question || !doctorId) {
+  //         res.write("❗ Thiếu doctorId hoặc question.\n");
+  //         return res.end();
+  //       }
+
+  //       // gửi phản hồi ngay lập tức để Postman hiển thị không phải chờ lâu
+  //       res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  //       res.setHeader("Transfer-Encoding", "chunked");
+  //       res.flushHeaders?.(); // rất quan trọng ❗
+  //       res.write("🤖 Bot đang truy vấn lịch khám...\n"); // hiển thị ngay lập trình
+
+  //       const dateMatch = question.toLowerCase().match(/\d{4}-\d{2}-\d{2}/);
+  //       const date = dateMatch ? dateMatch[0] : moment().format("YYYY-MM-DD");
+
+  //       const bookings = await db.Booking.findAll({
+  //         where: { doctorID: doctorId, date },
+  //         include: [
+  //           {
+  //             model: db.Allcode,
+  //             as: "timeTypeDataPatient",
+  //             attributes: ["valueVI"],
+  //           },
+  //           {
+  //             model: db.User,
+  //             as: "patientData",
+  //             attributes: ["firstName", "lastName"],
+  //           },
+  //           {
+  //             model: db.Allcode,
+  //             as: "statusData",
+  //             attributes: ["keyMap", "valueVI"],
+  //           },
+  //         ],
+  //         raw: true,
+  //         nest: true,
+  //       });
+
+  //       const extraContext = bookings.length
+  //         ? bookings
+  //             .map(
+  //               (b) =>
+  //                 `⏰ ${b.timeTypeDataPatient.valueVI} | 👤 ${b.patientData.firstName} ${b.patientData.lastName} | Trạng thái: ${b.statusData.valueVI}`
+  //             )
+  //             .join("\n")
+  //         : "Không có lịch khám";
+
+  //       const prompt = `
+  // Bạn là trợ lý AI trả lời câu hỏi về lịch khám thú cưng.
+  // Nhiệm vụ của bạn là đọc dữ liệu bên dưới và trả lời CÓ LIÊN QUAN, NGẮN GỌN, ĐÚNG THỰC TẾ.
+
+  // 📅 Ngày được yêu cầu: ${date}
+  // 📋 Danh sách lịch khám của bác sĩ (nếu có):
+  // ${extraContext}
+
+  // Quy tắc trả lời BẮT BUỘC:
+  // 1. Chỉ trả lời dựa trên dữ liệu đã cung cấp.
+  // 2. Không được suy đoán hay bịa thông tin nếu không có dữ liệu tương ứng.
+  // 3. Nếu không có lịch khám -> trả lời: "Ngày ${date} không có lịch khám nào."
+  // 4. Nếu có lịch, hãy trả lời đúng format:
+
+  // Ví dụ mẫu:
+  // Ngày YYYY-MM-DD có X lịch khám:
+  // - Thời gian: <time> | Khách: <name> | Trạng thái: <status>
+  // ...
+  // => Tóm tắt ngắn gọn cuối dòng.
+
+  // Câu hỏi người dùng: "${question}"
+
+  // Hãy trả lời theo đúng mẫu trên.
+  // `;
+
+  //       // gửi thêm text thông báo cho người dùng biết đang AI xử lý
+  //       res.write("🧠 Đang tạo câu trả lời bằng AI...\n");
+
+  //       const response = await axios({
+  //         url: "http://localhost:11434/api/generate",
+  //         method: "POST",
+  //         responseType: "stream",
+  //         data: { model: "phi3:mini", prompt, stream: true },
+  //       });
+
+  //       response.data.on("data", (chunk) => {
+  //         try {
+  //           const text = JSON.parse(chunk.toString()).response;
+  //           if (text) res.write(text);
+  //         } catch {}
+  //       });
+
+  //       response.data.on("end", () => {
+  //         res.write("\n✔ Hoàn thành.");
+  //         res.end();
+  //       });
+  //     } catch (err) {
+  //       res.write("⚠ Bot lỗi. " + err.message);
+  //       res.end();
+  //     }
+  //   },
+
+  // ------------------ BOT LỊCH KHÁM BÁC SĨ - SỬ DỤNG GROQ ------------------
+  //   handleScheduleBot: async (req, res) => {
+  //     let headerSent = false;
+
+  //     try {
+  //       const { question, doctorId } = req.body;
+  //       if (!question || !doctorId) {
+  //         return res.status(400).send("❗ Thiếu doctorId hoặc question");
+  //       }
+
+  //       // ---- GỬI HEADER SỚM TRÁNH LỖI HEADERS ALREADY SENT ----
+  //       res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  //       res.setHeader("Transfer-Encoding", "chunked");
+  //       res.write("🤖 Bot đang xử lý...\n");
+  //       headerSent = true;
+
+  //       // ------------------ 1. TÁCH NGÀY TỪ CÂU HỎI ------------------
+  //       let dateInput =
+  //         question.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || // 28/11/2025
+  //         question.match(/\d{4}-\d{2}-\d{2}/)?.[0] || // 2025-11-28
+  //         req.body.date;
+
+  //       // Nếu không nhập → mặc định hôm nay
+  //       const momentDate = dateInput
+  //         ? moment(dateInput, ["DD/MM/YYYY", "YYYY-MM-DD"])
+  //         : moment();
+
+  //       const timestampDay = moment(momentDate).startOf("day").valueOf(); // ♻ khớp format FE lưu
+
+  //       // ------------------ 2. TRUY VẤN LỊCH THEO BS + NGÀY ------------------
+  //       const bookings = await db.Booking.findAll({
+  //         where: { doctorID: doctorId, date: timestampDay.toString() },
+  //         include: [
+  //           {
+  //             model: db.Allcode,
+  //             as: "timeTypeDataPatient",
+  //             attributes: ["valueVI"],
+  //           },
+  //           {
+  //             model: db.User,
+  //             as: "patientData",
+  //             attributes: ["firstName", "lastName", "address", "gender"],
+  //           },
+  //           { model: db.Allcode, as: "statusData", attributes: ["valueVI"] },
+  //         ],
+  //         raw: true,
+  //         nest: true,
+  //       });
+
+  //       // Chuẩn hoá kết quả để AI dễ đọc hơn
+  //       const list = bookings.map(
+  //         (b, i) =>
+  //           `${i + 1}. ⏳ ${b.timeTypeDataPatient?.valueVI} | 👤 ${
+  //             b.patientData?.lastName
+  //           } ${b.patientData?.firstName} | 🏠 ${b.patientData?.address} | ${
+  //             b.statusData?.valueVI
+  //           }`
+  //       );
+
+  //       res.write(`📋 Tìm thấy ${bookings.length} lịch – gửi AI...\n`);
+
+  //       // ------------------ 3. PROMPT TỐI ƯU ĐỂ AI TRẢ LỜI ĐÚNG Ý ------------------
+  //       const prompt = `
+  // Bạn là trợ lý của bác sĩ. Trả lời CHỈ nội dung cần thiết.
+  // Nếu không có lịch: "Ngày ${momentDate.format(
+  //         "DD/MM/YYYY"
+  //       )} không có lịch khám nào."
+
+  // Nếu có lịch, trả như sau:
+
+  // 📅 Ngày ${momentDate.format("DD/MM/YYYY")} có ${list.length} lịch khám:
+
+  // ${list.join("\n")}
+
+  // Tổng cộng: ${list.length}
+  // `;
+
+  //       const ai = await axios.post(
+  //         "https://api.groq.com/openai/v1/chat/completions",
+  //         {
+  //           model: "llama-3.1-8b-instant",
+  //           messages: [{ role: "user", content: prompt }],
+  //           max_tokens: 300,
+  //           temperature: 0.1,
+  //         },
+  //         {
+  //           headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+  //           timeout: 15000,
+  //         }
+  //       );
+
+  //       res.write("\n📨 AI phản hồi:\n");
+  //       res.write(ai.data.choices[0].message.content);
+  //       res.write("\n\n✔ Hoàn tất.");
+  //       return res.end();
+  //     } catch (err) {
+  //       console.log("❌ Lỗi:", err.message);
+
+  //       if (!headerSent) return res.status(500).send("Server lỗi!");
+
+  //       res.write("\n⚠ Có lỗi xảy ra.");
+  //       return res.end();
+  //     }
+  //   },
+
+  handleScheduleBot: async (req, res) => {
+    let headerSent = false;
+
+    try {
+      const { question, doctorId } = req.body;
+      if (!question || !doctorId) {
+        return res.status(400).send("❗ Thiếu doctorId hoặc question");
+      }
+
+      // Gửi header sớm để tránh lỗi stream
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Transfer-Encoding", "chunked");
+      headerSent = true;
+
+      // ------------------------------------------------------------
+      // 1. NHẬN DIỆN CÂU HỎI — có liên quan tới lịch hay không?
+      // ------------------------------------------------------------
+      const scheduleKeywords = [
+        "lịch",
+        "khám",
+        "đặt lịch",
+        "appointment",
+        "schedule",
+        "ca khám",
+        "bác sĩ",
+      ];
+      const isScheduleQuestion = scheduleKeywords.some((k) =>
+        question.toLowerCase().includes(k)
+      );
+
+      // Nếu câu hỏi KHÔNG liên quan lịch → gửi thẳng AI trả lời tự nhiên
+      if (!isScheduleQuestion) {
+        const ai = await axios.post(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            model: "llama-3.1-8b-instant",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Bạn là chatbot hỗ trợ bệnh nhân, hãy trả lời thân thiện và tự nhiên.",
+              },
+              { role: "user", content: question },
+            ],
+            max_tokens: 200,
+            temperature: 0.7,
+          },
+          { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` } }
+        );
+
+        res.write(ai.data.choices[0].message.content);
+        return res.end();
+      }
+
+      // ------------------------------------------------------------
+      // 2. NẾU LÀ CÂU HỎI VỀ LỊCH — xử lý như logic trước
+      // ------------------------------------------------------------
+
+      let dateInput =
+        question.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] ||
+        question.match(/\d{4}-\d{2}-\d{2}/)?.[0] ||
+        req.body.date;
+
+      const momentDate = dateInput
+        ? moment(dateInput, ["DD/MM/YYYY", "YYYY-MM-DD"])
+        : moment();
+
+      const timestampDay = moment(momentDate).startOf("day").valueOf();
+
+      const bookings = await db.Booking.findAll({
+        where: { doctorID: doctorId, date: timestampDay.toString() },
+        include: [
+          {
+            model: db.Allcode,
+            as: "timeTypeDataPatient",
+            attributes: ["valueVI"],
+          },
+          {
+            model: db.User,
+            as: "patientData",
+            attributes: ["firstName", "lastName", "address", "gender"],
+          },
+          { model: db.Allcode, as: "statusData", attributes: ["valueVI"] },
+        ],
+        raw: true,
+        nest: true,
       });
 
-      response.data.on("end", () => res.end());
+      const list = bookings.map(
+        (b, i) =>
+          `${i + 1}. ⏳ ${b.timeTypeDataPatient?.valueVI} | 👤${
+            b.patientData?.firstName
+          } | 🏠 ${b.patientData?.address} | ${b.statusData?.valueVI}`
+      );
+
+      res.write(`📋 Tìm thấy ${bookings.length} lịch – gửi AI...\n`);
+
+      const prompt = `
+Bạn là trợ lý y tế, trả lời đúng trọng tâm và dễ hiểu.
+Nếu không có lịch thì trả lời: "Ngày ${momentDate.format(
+        "DD/MM/YYYY"
+      )} không có lịch khám nào."
+Nếu có lịch thì tổng hợp bằng bullet friendly:
+
+📅 Ngày ${momentDate.format("DD/MM/YYYY")} có ${list.length} lịch khám:
+
+${list.join("\n")}
+
+Tổng cộng: ${list.length}
+    `;
+
+      const ai = await axios.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 300,
+          temperature: 0.2,
+        },
+        { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` } }
+      );
+
+      res.write(ai.data.choices[0].message.content);
+      return res.end();
     } catch (err) {
-      console.log("❌ AI Service ERROR:", err.message);
-      res.write("⚠ AI đang gặp sự cố, thử lại sau.");
-      res.end();
+      console.log("❌ Lỗi:", err.message);
+      if (!headerSent) return res.status(500).send("Server lỗi!");
+      res.write("\n⚠ Có lỗi xảy ra.");
+      return res.end();
     }
   },
 };

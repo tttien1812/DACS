@@ -34,26 +34,35 @@ const handleAskAI = async (req, res) => {
   try {
     const { question } = req.body;
 
-    if (!question || question.trim() === "") {
+    if (!question) {
       return res.status(400).json({ errCode: 1, message: "Thiếu câu hỏi" });
     }
 
-    // Bật chế độ stream về FE
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    // Gọi service stream từng chunk về FE
-    await aiService.handleAskAI(question, res);
+    // stream trực tiếp
+    return aiService.handleAskAI(question, res);
   } catch (error) {
-    console.log("❌ AI Controller ERROR:", error);
+    console.log("❌ Controller ERROR:", error);
     return res.status(500).json({
       errCode: -1,
-      message: "Lỗi xử lý AI",
+      message: "Server lỗi",
       error: error.message,
     });
   }
 };
 
+const askSchedule = async (req, res) => {
+  try {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    await aiService.handleScheduleBot(req, res);
+  } catch (err) {
+    console.log("❌ Controller error:", err.message);
+    return res.status(500).json({ errCode: -1, message: "Server error" });
+  }
+};
+
 export default {
   handleAskAI,
+  askSchedule,
 };

@@ -136,6 +136,7 @@ let initWebRoutes = (app) => {
 
   //AI
   router.post("/api/ask", aiController.handleAskAI);
+  router.post("/api/ai/schedule", aiController.askSchedule);
 
   //zalopay
   router.post("/api/order", orderController.createOrder);
