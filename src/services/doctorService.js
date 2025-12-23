@@ -747,6 +747,11 @@ let getListPatientForDoctor = (doctorID, date) => {
             as: "timeTypeDataPatient",
             attributes: ["valueEN", "valueVI"],
           },
+          {
+            model: db.BookingImage,
+            as: "images",
+            attributes: ["bookingId", "imageUrl"],
+          },
         ],
         raw: false,
         nest: true,
@@ -1014,6 +1019,83 @@ let getDoctorByIdService = (doctorId) => {
   });
 };
 
+let getBookingDetail = (bookingId) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!bookingId) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Missing required parameters!",
+        });
+      }
+
+      let data = await db.Booking.findAll({
+        where: {
+          statusID: "S2",
+          id: bookingId,
+        },
+        include: [
+          {
+            model: db.User,
+            as: "patientData",
+            attributes: [
+              "id",
+              "email",
+              "firstName",
+              "gender",
+              "address",
+              "phoneNumber",
+            ],
+            include: [
+              {
+                model: db.Allcode,
+                as: "genderData",
+                attributes: ["valueEN", "valueVI"],
+              },
+            ],
+          },
+
+          // LẤY PET CHO BÁC SĨ HÃY CHÚ Ý
+          {
+            model: db.Pet,
+            as: "petData",
+            attributes: [
+              "name",
+              "species",
+              "breed",
+              "ownerId",
+              "weight",
+              "gender",
+              "birthday",
+            ],
+          },
+
+          {
+            model: db.Allcode,
+            as: "timeTypeDataPatient",
+            attributes: ["valueEN", "valueVI"],
+          },
+          {
+            model: db.BookingImage,
+            as: "images",
+            attributes: ["bookingId", "imageUrl"],
+          },
+        ],
+        raw: false,
+        nest: true,
+      });
+
+      return resolve({
+        errCode: 0,
+        data: data,
+      });
+    } catch (e) {
+      console.log(e);
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -1036,4 +1118,5 @@ module.exports = {
   approveBooking,
   getListNewBookingForDoctor,
   rejectBooking,
+  getBookingDetail,
 };

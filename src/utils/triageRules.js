@@ -1,0 +1,26 @@
+export const triageRules = {
+  red: [
+    "co giật",
+    "khó thở",
+    "ngất",
+    "bất tỉnh",
+    "chảy máu nhiều",
+    "nôn ra máu",
+    "tiêu chảy ra máu",
+    "không đứng được",
+    "sốt cao liên tục",
+    "nuốt dị vật",
+    "tai nạn",
+  ],
+  yellow: [
+    "nôn",
+    "tiêu chảy",
+    "bỏ ăn",
+    "mệt",
+    "đi khập khiễng",
+    "sưng",
+    "sốt",
+    "ngứa nhiều",
+    "ho",
+  ],
+};

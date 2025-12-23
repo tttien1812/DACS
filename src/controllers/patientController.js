@@ -91,6 +91,22 @@ let getBookingStatusS3 = async (req, res) => {
   }
 };
 
+let postBookAppointmentAI = async (req, res) => {
+  try {
+    let data = req.body;
+
+    let response = await patientService.postBookAppointmentAI(data);
+
+    return res.status(200).json(response);
+  } catch (e) {
+    console.log("❌ Error in postBookAppointmentAI:", e);
+    return res.status(500).json({
+      errCode: -1,
+      errMessage: "Error from server!",
+    });
+  }
+};
+
 module.exports = {
   postBookAppointment: postBookAppointment,
   postVerifyBookAppointment: postVerifyBookAppointment,
@@ -99,4 +115,5 @@ module.exports = {
   cancelBooking,
   rescheduleBooking,
   getBookingStatusS3,
+  postBookAppointmentAI,
 };

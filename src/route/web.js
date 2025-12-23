@@ -69,6 +69,8 @@ let initWebRoutes = (app) => {
     "/api/get-list-patient-for-doctor",
     doctorController.getListPatientForDoctor
   );
+  router.get("/api/get-detail-booking", doctorController.getBookingDetail);
+
   router.post("/api/send-remedy", doctorController.sendRemedy);
 
   router.get("/api/get-pending-doctors", doctorController.getPendingDoctors);
@@ -137,6 +139,14 @@ let initWebRoutes = (app) => {
   //AI
   router.post("/api/ask", aiController.handleAskAI);
   router.post("/api/ai/schedule", aiController.askSchedule);
+  router.post(
+    "/api/book-appointment-ai",
+    patientController.postBookAppointmentAI
+  );
+  router.get(
+    "/api/get-doctors-by-specialty",
+    specialtyController.getDoctorsBySpecialty
+  );
 
   //zalopay
   router.post("/api/order", orderController.createOrder);

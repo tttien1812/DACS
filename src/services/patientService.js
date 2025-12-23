@@ -77,6 +77,17 @@ let buildUrlEmail = (doctorID, token) => {
 let postBookAppointment = (data) => {
   return new Promise(async (resolve, reject) => {
     try {
+      console.log("===== BACKEND BOOKING DATA =====");
+      console.log(data);
+      console.log("VALIDATION CHECK:", {
+        email: data.email,
+        doctorID: data.doctorID,
+        timeType: data.timeType,
+        date: data.date,
+        fullname: data.fullname,
+        selectedGender: data.selectedGender,
+        address: data.address,
+      });
       // ===================== CHECK REQUIRED BOOKING FIELDS =====================
       if (
         !data.email ||
@@ -133,7 +144,7 @@ let postBookAppointment = (data) => {
       // ===================== CREATE BOOKING =====================
       let token = uuidv4();
 
-      await db.Booking.create({
+      let booking = await db.Booking.create({
         statusID: "S1",
         doctorID: data.doctorID,
         patientID: user.id,
@@ -143,6 +154,20 @@ let postBookAppointment = (data) => {
         token: token,
         reason: data.reason,
       });
+
+      // ===================== SAVE BOOKING IMAGES (BLOB) =====================
+      if (data.images && data.images.length > 0) {
+        for (let img of data.images) {
+          let base64 = img.data || img; // nếu FE chỉ gửi raw base64
+          let cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+          let buffer = Buffer.from(cleanBase64, "base64");
+
+          await db.BookingImage.create({
+            bookingId: booking.id,
+            imageUrl: buffer,
+          });
+        }
+      }
 
       return resolve({
         errCode: 0,
@@ -508,6 +533,128 @@ let getBookingStatusS3 = (email) => {
   });
 };
 
+let postBookAppointmentAI = (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // ===================== VALIDATION =====================
+      if (
+        !data.email ||
+        !data.fullname ||
+        !data.selectedGender ||
+        !data.address ||
+        !data.timeType ||
+        !data.date
+      ) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Missing required booking fields",
+        });
+      }
+
+      // ===================== UPSERT USER =====================
+      let [user] = await db.User.findOrCreate({
+        where: { email: data.email },
+        defaults: {
+          email: data.email,
+          roleId: "R3",
+          gender: data.selectedGender,
+          address: data.address,
+          firstName: data.fullname,
+          phoneNumber: data.phoneNumber,
+        },
+      });
+
+      // ===================== DETERMINE DOCTOR =====================
+      let doctorID = data.doctorID || null;
+
+      // Nếu không chọn bác sĩ → chọn từ chuyên khoa
+      if (!doctorID && data.specialtyID) {
+        const doctors = await db.Doctor_Info.findAll({
+          where: { specialtyId: data.specialtyID },
+        });
+
+        if (!doctors || doctors.length === 0) {
+          return resolve({
+            errCode: 2,
+            errMessage: "No doctor available in this specialty",
+          });
+        }
+
+        // Lấy ngẫu nhiên 1 bác sĩ
+        const randomDoctor =
+          doctors[Math.floor(Math.random() * doctors.length)];
+        doctorID = randomDoctor.doctorId;
+      }
+
+      if (!doctorID) {
+        return resolve({
+          errCode: 3,
+          errMessage: "You must select a doctor or a specialty",
+        });
+      }
+
+      // ===================== CREATE PET IF PROVIDED =====================
+      let petId = null;
+
+      if (data.pet) {
+        if (data.pet.id) {
+          petId = data.pet.id;
+        } else {
+          let newPet = await db.Pet.create({
+            name: data.pet.name,
+            species: data.pet.species,
+            breed: data.pet.breed,
+            birthday: data.pet.birthday,
+            weight: data.pet.weight,
+            gender: data.pet.gender,
+            status: data.pet.status || "active",
+            ownerId: user.id,
+          });
+
+          petId = newPet.id;
+        }
+      }
+
+      // ===================== CREATE BOOKING =====================
+      let token = uuidv4();
+
+      let booking = await db.Booking.create({
+        statusID: "S1",
+        doctorID: doctorID,
+        patientID: user.id,
+        petId: petId,
+        date: data.date,
+        timeType: data.timeType,
+        token: token,
+        reason: data.reason || "",
+      });
+
+      // ===================== SAVE BOOKING IMAGES (BLOB) =====================
+      if (data.images && data.images.length > 0) {
+        for (let img of data.images) {
+          let base64 = img.data || img;
+          let cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+          let buffer = Buffer.from(cleanBase64, "base64");
+
+          await db.BookingImage.create({
+            bookingId: booking.id,
+            imageUrl: buffer,
+          });
+        }
+      }
+
+      return resolve({
+        errCode: 0,
+        errMessage: "Booking (AI) saved!",
+        bookingId: booking.id,
+        doctorID: doctorID,
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   postBookAppointment: postBookAppointment,
   postVerifyBookAppointment: postVerifyBookAppointment,
@@ -516,4 +663,5 @@ module.exports = {
   cancelBooking,
   rescheduleBooking,
   getBookingStatusS3,
+  postBookAppointmentAI,
 };

@@ -461,10 +461,139 @@
 import db from "../models/index.js";
 import axios from "axios";
 import moment from "moment";
+import { symptomMapping } from "../utils/symptomMap.js";
+import { triageRules } from "../utils/triageRules.js";
 
 require("dotenv").config();
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+function normalize(str) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function smartMatchSpecialty(question, specialties, autoSpecialty) {
+  const q = normalize(question);
+
+  // 1. Match exact
+  let match = specialties.find((s) => normalize(s.name) === q);
+  if (match) return match;
+
+  // 2. Match contains tên chuyên khoa
+  match = specialties.find((s) => q.includes(normalize(s.name)));
+  if (match) return match;
+
+  // 3. Match từ symptomMapping → chuyên khoa tự động
+  if (autoSpecialty) {
+    const auto = normalize(autoSpecialty);
+    match = specialties.find((s) => normalize(s.name).includes(auto));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+function detectMedicine(question, medicines) {
+  if (!question || !medicines?.length) return null;
+
+  const q = question.toLowerCase();
+
+  return medicines.find((m) => {
+    if (!m.description) return false;
+
+    const desc = m.description.toLowerCase();
+
+    // Match full description
+    if (q.includes(desc)) return true;
+
+    // Match keyword (lọc từ dài để tránh nhiễu)
+    const keywords = desc.split(" ").filter((k) => k.length >= 5);
+    return keywords.some((k) => q.includes(k));
+  });
+}
+
+function detectTriageLevel(question) {
+  const qRaw = question.toLowerCase();
+  const qNorm = normalize(question);
+
+  const match = (keyword) =>
+    qRaw.includes(keyword.toLowerCase()) || qNorm.includes(normalize(keyword));
+
+  if (triageRules.red.some(match)) {
+    return {
+      level: "🔴 CẤP CỨU",
+      system: true,
+      advice: [
+        "Đưa thú cưng đến cơ sở thú y gần nhất NGAY LẬP TỨC",
+        "Không tự ý điều trị tại nhà",
+        "Giữ thú cưng ấm và hạn chế di chuyển",
+      ],
+    };
+  }
+
+  if (triageRules.yellow.some(match)) {
+    return {
+      level: "🟡 NÊN ĐI KHÁM SỚM",
+      system: false,
+      advice: [
+        "Theo dõi sát tình trạng trong 24 giờ",
+        "Nếu không cải thiện → nên đưa đi khám",
+        "Ghi lại các triệu chứng để báo bác sĩ",
+      ],
+    };
+  }
+
+  return {
+    level: "🟢 THEO DÕI TẠI NHÀ",
+    system: false,
+    advice: [
+      "Tiếp tục theo dõi ăn uống và sinh hoạt",
+      "Giữ môi trường sạch sẽ, yên tĩnh",
+      "Nếu xuất hiện triệu chứng nặng hơn → đi khám",
+    ],
+  };
+}
+
+function buildEmergencyPrompt(question, doctorsText) {
+  return `
+🚨🚨🚨 CẢNH BÁO KHẨN CẤP 🚨🚨🚨
+MỨC ĐỘ: 🔴 CẤP CỨU
+
+HÀNH ĐỘNG NGAY:
+• Đưa thú cưng đến cơ sở thú y gần nhất NGAY LẬP TỨC
+• KHÔNG chờ đợi hoặc tự điều trị tại nhà
+• Giữ thú cưng ấm và hạn chế di chuyển
+
+${doctorsText ? `BÁC SĨ CÓ THỂ LIÊN HỆ NGAY:\n${doctorsText}` : ""}
+
+⚠ Tình trạng có thể đe dọa tính mạng nếu trì hoãn
+
+Câu hỏi của chủ nuôi: "${question}"
+
+QUY TẮC BẮT BUỘC:
+- KHÔNG giải thích nguyên nhân
+- KHÔNG viết đoạn văn
+- KHÔNG dùng tiêu đề TƯ VẤN / LƯU Ý
+- KHÔNG hỏi lịch đặt khám
+- CHỈ dùng bullet
+`;
+}
+
+function renderTriageHeader(triage) {
+  return `
+==============================
+ĐÁNH GIÁ KHẨN CẤP (HỆ THỐNG)
+MỨC ĐỘ: ${triage.level}
+
+KHUYẾN NGHỊ:
+${triage.advice.map((a) => `• ${a}`).join("\n")}
+==============================
+
+`;
+}
 
 const aiService = {
   handleAskAI: async (question, res) => {
@@ -475,17 +604,36 @@ const aiService = {
 
       if (!question) return res.end("⚠ Vui lòng nhập câu hỏi.");
 
+      const triage = detectTriageLevel(question);
+
+      // ✅ BẮT BUỘC IN TRIAGE TRƯỚC – KHÔNG PHỤ THUỘC AI
+      res.write(renderTriageHeader(triage));
+
       //------------------------------------------------------
       // 1. RAG lấy bác sĩ theo chuyên khoa trong DB
       //------------------------------------------------------
+
       let extraContext = "";
       let doctorFound = false;
 
       const specialties = await db.Specialty.findAll({ raw: true });
+      const medicines = await db.Medicine.findAll({ raw: true });
 
-      const match = specialties.find((s) =>
-        question.toLowerCase().includes(s.name.toLowerCase())
-      );
+      let autoSpecialty = null;
+      const qNorm = question.toLowerCase();
+
+      Object.keys(symptomMapping).some((key) => {
+        if (question.toLowerCase().includes(key)) {
+          autoSpecialty = symptomMapping[key];
+          return true;
+        }
+      });
+
+      let match = smartMatchSpecialty(question, specialties, autoSpecialty);
+
+      if (autoSpecialty && !match) {
+        extraContext += `🔎 Phát hiện triệu chứng liên quan đến chuyên khoa: ${autoSpecialty}\n`;
+      }
 
       if (match) {
         const doctors = await db.Doctor_Infor.findAll({
@@ -516,9 +664,9 @@ const aiService = {
                 `#${index + 1} Bác sĩ: ${d.doctorInfo.lastName} ${
                   d.doctorInfo.firstName
                 }\n` +
-                `📍 Địa chỉ: ${d.doctorInfo.address ?? "Không rõ"}\n` +
-                `📞 SĐT: ${d.doctorInfo.phoneNumber ?? "Chưa cập nhật"}\n` +
-                `🔗 Link đặt khám: ${url}\n`
+                `Địa chỉ: ${d.doctorInfo.address ?? "Không rõ"}\n` +
+                `SĐT: ${d.doctorInfo.phoneNumber ?? "Chưa cập nhật"}\n` +
+                `Link đặt khám: ${url}\n`
               );
             })
             .join("\n");
@@ -527,34 +675,68 @@ const aiService = {
         }
       }
 
-      //------------------------------------------------------
-      // 2. Tạo Prompt thông minh
-      //------------------------------------------------------
-      //       let prompt = doctorFound
-      //         ? `
-      // Bạn là AI tư vấn thú y chuyên nghiệp.
-      // Trả lời lịch sự – chỉ dùng dữ liệu bên dưới.
+      // 🔴 CẤP CỨU → OVERRIDE TOÀN BỘ
+      if (triage.level === "🔴 CẤP CỨU") {
+        let doctorsText = "";
 
-      // Danh sách bác sĩ tìm được:
-      // ${extraContext}
+        if (doctorFound) {
+          doctorsText = extraContext
+            .split("\n")
+            .filter((line) => line.startsWith("#"))
+            .map((line) => `• ${line.replace("#", "").trim()}`)
+            .join("\n");
+        }
 
-      // Yêu cầu khách: "${question}"
-      // Hãy trả lời rõ ràng bằng bullet, KHÔNG bịa thông tin.
-      // `
-      //         : `
-      // Bạn là trợ lý thú y.
-      // Nhiệm vụ:
-      // - Trả lời câu hỏi thông thường.
-      // - Nếu thú cưng bị bệnh/tai nạn -> hướng dẫn sơ cứu & khuyên đến bác sĩ gần nhất.
-      // - Nếu hỏi tìm bác sĩ nhưng không có chuyên khoa -> bảo khách nêu chuyên khoa.
-      // Trả lời tiếng Việt ngắn gọn, dễ hiểu.
+        const emergencyPrompt = buildEmergencyPrompt(question, doctorsText);
 
-      // Câu hỏi: "${question}"
-      // `;
+        const response = await axios({
+          method: "POST",
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          headers: {
+            Authorization: `Bearer ${process.env.GROQ_API_KEY_CUS}`,
+            "Content-Type": "application/json",
+          },
+          responseType: "stream",
+          data: {
+            model: "llama-3.1-8b-instant",
+            messages: [{ role: "user", content: emergencyPrompt }],
+            stream: true,
+          },
+        });
 
-      //------------------------------------------------------
-      // 2. Tạo Prompt thông minh CHẶT CHẼ HƠN
-      //------------------------------------------------------
+        response.data.on("data", (chunk) => {
+          const lines = chunk.toString().split("\n");
+          lines.forEach((line) => {
+            if (line.startsWith("data: ")) {
+              const data = line.replace("data: ", "").trim();
+              if (data === "[DONE]") return res.end();
+
+              try {
+                const json = JSON.parse(data);
+                const content = json.choices?.[0]?.delta?.content;
+                if (content) res.write(content);
+              } catch {}
+            }
+          });
+        });
+
+        return;
+      }
+
+      const medicineFound = detectMedicine(question, medicines);
+      let medicineContext = "";
+
+      if (medicineFound) {
+        medicineContext = `
+ THÔNG TIN THUỐC TRONG HỆ THỐNG:
+- Mô tả: ${medicineFound.description}
+- Giá tham khảo: ${medicineFound.price} VNĐ
+
+Ghi chú:
+- Hệ thống KHÔNG lưu liều lượng chi tiết
+- Chỉ tư vấn cách dùng & theo dõi an toàn
+`;
+      }
 
       let prompt = "";
 
@@ -564,7 +746,12 @@ Bạn là AI tư vấn thú y cho khách hàng.
 Bạn PHẢI trả lời dựa 100% trên dữ liệu bác sĩ bên dưới.
 Nếu người dùng hỏi thêm gì ngoài phạm vi dữ liệu → lịch sự từ chối và gợi ý.
 
---- DỮ LIỆU BÁC SĨ CHÍNH XÁC ---
+BẮT BUỘC TUÂN THỦ FORMAT SAU:
+- Không chèn dòng trống
+- Mỗi ý 1 dòng
+- Trình bày rõ ràng, súc tích
+
+--- BÁC SĨ PHÙ HỢP ---
 ${extraContext}
 --------------------------------
 
@@ -575,7 +762,88 @@ Quy tắc trả lời:
 - KHÔNG tự tạo thêm bác sĩ, thông tin, số điện thoại hay địa chỉ ngoài danh sách.
 - Nếu người dùng hỏi về điều không có trong dữ liệu → trả lời "Dữ liệu không có, vui lòng cung cấp chuyên khoa khác".
 - Cuối câu luôn kèm: "Bạn có muốn xem lịch đặt khám không?"
+
+FORMAT TRẢ LỜI:
+
+👨‍⚕️ BÁC SĨ PHÙ HỢP
+• Liệt kê theo danh sách trên
+
+TƯ VẤN
+• Trả lời đúng nội dung câu hỏi
+• Nếu phát hiện triệu chứng → gợi ý bác sĩ phù hợp
+
+ LƯU Ý
+• Không tự tạo bác sĩ
+• Không thêm số điện thoại, địa chỉ ngoài dữ liệu
+• Nếu câu hỏi ngoài phạm vi → trả lời: "Dữ liệu không có, vui lòng cung cấp chuyên khoa khác"
+
+KẾT THÚC
+• Bạn có muốn xem lịch đặt khám không?
+
   `;
+      } else if (medicineFound) {
+        prompt = `
+Bạn là AI tư vấn thú y chuyên nghiệp.
+Chỉ sử dụng dữ liệu bên dưới và kiến thức thú y PHỔ THÔNG, AN TOÀN.
+
+BẮT BUỘC TUÂN THỦ FORMAT SAU:
+- Không dòng trống
+- Mỗi bullet 1 ý
+- Không văn giải thích dài
+- Không dùng câu "Tôi không thấy thông tin trong hệ thống"
+
+--- DỮ LIỆU THUỐC ---
+${medicineContext}
+-------------------
+
+Câu hỏi khách hàng: "${question}"
+
+Yêu cầu trả lời:
+- Thuốc dùng để làm gì (ngắn gọn)
+- Cách dùng an toàn (KHÔNG nêu liều mg/kg)
+- Những dấu hiệu cần theo dõi sau khi dùng
+- Khi nào cần ngưng thuốc và đưa thú cưng đi bác sĩ
+- Nếu là thuốc kê đơn → nhấn mạnh cần bác sĩ chỉ định
+
+❌ KHÔNG:
+- Không tự ý kê đơn
+- Không cam kết chữa khỏi
+- Không thay thế bác sĩ thú y
+
+FORMAT TRẢ LỜI:
+
+THÔNG TIN THUỐC
+• Giải thích ngắn gọn thuốc dùng để làm gì
+
+CÁCH DÙNG AN TOÀN
+• Hướng dẫn chung
+• Không nêu liều mg/kg
+• Nhấn mạnh tuân theo bác sĩ/nhà sản xuất
+
+THEO DÕI SAU KHI DÙNG
+• Các dấu hiệu thường gặp
+• Dấu hiệu bất thường cần chú ý
+
+ KHI NÀO CẦN ĐI BÁC SĨ
+• Các tình huống cần ngưng thuốc
+• Khuyến nghị đưa thú cưng đi khám
+
+ LƯU Ý
+• Không tự ý kê đơn
+• Không cam kết chữa khỏi
+• Không thay thế bác sĩ thú y
+
+Trả lời bằng bullet, tiếng Việt dễ hiểu.
+`;
+
+        if (doctorFound) {
+          prompt += `
+📌 Nếu tình trạng không cải thiện hoặc có phản ứng bất thường,
+hãy gợi ý liên hệ bác sĩ bên dưới:
+
+${extraContext}
+`;
+        }
       } else {
         prompt = `
 Bạn là trợ lý thú y thông minh.
@@ -584,6 +852,7 @@ Mục tiêu của bạn:
 ✔ Nếu người dùng hỏi về bệnh/thú cưng → hướng dẫn sơ cứu an toàn từng bước
 ✔ Nếu câu hỏi muốn tìm bác sĩ nhưng không có chuyên khoa → yêu cầu cung cấp chuyên khoa
 ✔ Không bịa tên bác sĩ nếu không có dữ liệu
+
 
 Ví dụ hướng dẫn sơ cứu mẫu:
 - Giữ thú cưng cố định
@@ -643,215 +912,6 @@ Trả lời tiếng Việt tự nhiên, ngắn gọn, không dài dòng.
     }
   },
 
-  // ------------------ BOT LỊCH KHÁM BÁC SĨ - SỬ DỤNG OLLAMA ------------------
-
-  //   handleScheduleBot: async (req, res) => {
-  //     try {
-  //       const { question, doctorId } = req.body;
-
-  //       if (!question || !doctorId) {
-  //         res.write("❗ Thiếu doctorId hoặc question.\n");
-  //         return res.end();
-  //       }
-
-  //       // gửi phản hồi ngay lập tức để Postman hiển thị không phải chờ lâu
-  //       res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  //       res.setHeader("Transfer-Encoding", "chunked");
-  //       res.flushHeaders?.(); // rất quan trọng ❗
-  //       res.write("🤖 Bot đang truy vấn lịch khám...\n"); // hiển thị ngay lập trình
-
-  //       const dateMatch = question.toLowerCase().match(/\d{4}-\d{2}-\d{2}/);
-  //       const date = dateMatch ? dateMatch[0] : moment().format("YYYY-MM-DD");
-
-  //       const bookings = await db.Booking.findAll({
-  //         where: { doctorID: doctorId, date },
-  //         include: [
-  //           {
-  //             model: db.Allcode,
-  //             as: "timeTypeDataPatient",
-  //             attributes: ["valueVI"],
-  //           },
-  //           {
-  //             model: db.User,
-  //             as: "patientData",
-  //             attributes: ["firstName", "lastName"],
-  //           },
-  //           {
-  //             model: db.Allcode,
-  //             as: "statusData",
-  //             attributes: ["keyMap", "valueVI"],
-  //           },
-  //         ],
-  //         raw: true,
-  //         nest: true,
-  //       });
-
-  //       const extraContext = bookings.length
-  //         ? bookings
-  //             .map(
-  //               (b) =>
-  //                 `⏰ ${b.timeTypeDataPatient.valueVI} | 👤 ${b.patientData.firstName} ${b.patientData.lastName} | Trạng thái: ${b.statusData.valueVI}`
-  //             )
-  //             .join("\n")
-  //         : "Không có lịch khám";
-
-  //       const prompt = `
-  // Bạn là trợ lý AI trả lời câu hỏi về lịch khám thú cưng.
-  // Nhiệm vụ của bạn là đọc dữ liệu bên dưới và trả lời CÓ LIÊN QUAN, NGẮN GỌN, ĐÚNG THỰC TẾ.
-
-  // 📅 Ngày được yêu cầu: ${date}
-  // 📋 Danh sách lịch khám của bác sĩ (nếu có):
-  // ${extraContext}
-
-  // Quy tắc trả lời BẮT BUỘC:
-  // 1. Chỉ trả lời dựa trên dữ liệu đã cung cấp.
-  // 2. Không được suy đoán hay bịa thông tin nếu không có dữ liệu tương ứng.
-  // 3. Nếu không có lịch khám -> trả lời: "Ngày ${date} không có lịch khám nào."
-  // 4. Nếu có lịch, hãy trả lời đúng format:
-
-  // Ví dụ mẫu:
-  // Ngày YYYY-MM-DD có X lịch khám:
-  // - Thời gian: <time> | Khách: <name> | Trạng thái: <status>
-  // ...
-  // => Tóm tắt ngắn gọn cuối dòng.
-
-  // Câu hỏi người dùng: "${question}"
-
-  // Hãy trả lời theo đúng mẫu trên.
-  // `;
-
-  //       // gửi thêm text thông báo cho người dùng biết đang AI xử lý
-  //       res.write("🧠 Đang tạo câu trả lời bằng AI...\n");
-
-  //       const response = await axios({
-  //         url: "http://localhost:11434/api/generate",
-  //         method: "POST",
-  //         responseType: "stream",
-  //         data: { model: "phi3:mini", prompt, stream: true },
-  //       });
-
-  //       response.data.on("data", (chunk) => {
-  //         try {
-  //           const text = JSON.parse(chunk.toString()).response;
-  //           if (text) res.write(text);
-  //         } catch {}
-  //       });
-
-  //       response.data.on("end", () => {
-  //         res.write("\n✔ Hoàn thành.");
-  //         res.end();
-  //       });
-  //     } catch (err) {
-  //       res.write("⚠ Bot lỗi. " + err.message);
-  //       res.end();
-  //     }
-  //   },
-
-  // ------------------ BOT LỊCH KHÁM BÁC SĨ - SỬ DỤNG GROQ ------------------
-  //   handleScheduleBot: async (req, res) => {
-  //     let headerSent = false;
-
-  //     try {
-  //       const { question, doctorId } = req.body;
-  //       if (!question || !doctorId) {
-  //         return res.status(400).send("❗ Thiếu doctorId hoặc question");
-  //       }
-
-  //       // ---- GỬI HEADER SỚM TRÁNH LỖI HEADERS ALREADY SENT ----
-  //       res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  //       res.setHeader("Transfer-Encoding", "chunked");
-  //       res.write("🤖 Bot đang xử lý...\n");
-  //       headerSent = true;
-
-  //       // ------------------ 1. TÁCH NGÀY TỪ CÂU HỎI ------------------
-  //       let dateInput =
-  //         question.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || // 28/11/2025
-  //         question.match(/\d{4}-\d{2}-\d{2}/)?.[0] || // 2025-11-28
-  //         req.body.date;
-
-  //       // Nếu không nhập → mặc định hôm nay
-  //       const momentDate = dateInput
-  //         ? moment(dateInput, ["DD/MM/YYYY", "YYYY-MM-DD"])
-  //         : moment();
-
-  //       const timestampDay = moment(momentDate).startOf("day").valueOf(); // ♻ khớp format FE lưu
-
-  //       // ------------------ 2. TRUY VẤN LỊCH THEO BS + NGÀY ------------------
-  //       const bookings = await db.Booking.findAll({
-  //         where: { doctorID: doctorId, date: timestampDay.toString() },
-  //         include: [
-  //           {
-  //             model: db.Allcode,
-  //             as: "timeTypeDataPatient",
-  //             attributes: ["valueVI"],
-  //           },
-  //           {
-  //             model: db.User,
-  //             as: "patientData",
-  //             attributes: ["firstName", "lastName", "address", "gender"],
-  //           },
-  //           { model: db.Allcode, as: "statusData", attributes: ["valueVI"] },
-  //         ],
-  //         raw: true,
-  //         nest: true,
-  //       });
-
-  //       // Chuẩn hoá kết quả để AI dễ đọc hơn
-  //       const list = bookings.map(
-  //         (b, i) =>
-  //           `${i + 1}. ⏳ ${b.timeTypeDataPatient?.valueVI} | 👤 ${
-  //             b.patientData?.lastName
-  //           } ${b.patientData?.firstName} | 🏠 ${b.patientData?.address} | ${
-  //             b.statusData?.valueVI
-  //           }`
-  //       );
-
-  //       res.write(`📋 Tìm thấy ${bookings.length} lịch – gửi AI...\n`);
-
-  //       // ------------------ 3. PROMPT TỐI ƯU ĐỂ AI TRẢ LỜI ĐÚNG Ý ------------------
-  //       const prompt = `
-  // Bạn là trợ lý của bác sĩ. Trả lời CHỈ nội dung cần thiết.
-  // Nếu không có lịch: "Ngày ${momentDate.format(
-  //         "DD/MM/YYYY"
-  //       )} không có lịch khám nào."
-
-  // Nếu có lịch, trả như sau:
-
-  // 📅 Ngày ${momentDate.format("DD/MM/YYYY")} có ${list.length} lịch khám:
-
-  // ${list.join("\n")}
-
-  // Tổng cộng: ${list.length}
-  // `;
-
-  //       const ai = await axios.post(
-  //         "https://api.groq.com/openai/v1/chat/completions",
-  //         {
-  //           model: "llama-3.1-8b-instant",
-  //           messages: [{ role: "user", content: prompt }],
-  //           max_tokens: 300,
-  //           temperature: 0.1,
-  //         },
-  //         {
-  //           headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-  //           timeout: 15000,
-  //         }
-  //       );
-
-  //       res.write("\n📨 AI phản hồi:\n");
-  //       res.write(ai.data.choices[0].message.content);
-  //       res.write("\n\n✔ Hoàn tất.");
-  //       return res.end();
-  //     } catch (err) {
-  //       console.log("❌ Lỗi:", err.message);
-
-  //       if (!headerSent) return res.status(500).send("Server lỗi!");
-
-  //       res.write("\n⚠ Có lỗi xảy ra.");
-  //       return res.end();
-  //     }
-  //   },
-
   handleScheduleBot: async (req, res) => {
     let headerSent = false;
 
@@ -881,6 +941,57 @@ Trả lời tiếng Việt tự nhiên, ngắn gọn, không dài dòng.
       const isScheduleQuestion = scheduleKeywords.some((k) =>
         question.toLowerCase().includes(k)
       );
+
+      const diagnosisKeywords = [
+        "tình trạng",
+        "triệu chứng",
+        "ngứa",
+        "rụng lông",
+        "nôn",
+        "tiêu chảy",
+        "mẩn đỏ",
+        "biểu hiện",
+      ];
+
+      const isDiagnosisQuestion = diagnosisKeywords.some((k) =>
+        question.toLowerCase().includes(k)
+      );
+
+      if (isDiagnosisQuestion) {
+        const prompt = `
+Bạn là AI hỗ trợ bác sĩ thú y, chỉ có nhiệm vụ tổng hợp thông tin.
+
+NHIỆM VỤ:
+- KHÔNG chẩn đoán bệnh
+- KHÔNG khẳng định nguyên nhân
+- KHÔNG đưa ra hướng điều trị
+
+BÁC SĨ MÔ TẢ TÌNH TRẠNG THÚ CƯNG NHƯ SAU:
+"${question}"
+
+YÊU CẦU TRẢ LỜI:
+1. Tóm tắt ngắn gọn tình trạng hiện tại
+2. Các khả năng phổ biến có thể liên quan (tối đa 3, dùng từ "có thể")
+3. Ghi chú hỗ trợ cho bác sĩ theo dõi
+4. Cảnh báo bắt buộc: "Chỉ mang tính hỗ trợ, không thay thế chẩn đoán của bác sĩ"
+
+NGÔN NGỮ: Tiếng Việt, trung lập, chuyên nghiệp
+  `;
+
+        const ai = await axios.post(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            model: "llama-3.1-8b-instant",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 300,
+            temperature: 0.3,
+          },
+          { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` } }
+        );
+
+        res.write(ai.data.choices[0].message.content);
+        return res.end();
+      }
 
       // Nếu câu hỏi KHÔNG liên quan lịch → gửi thẳng AI trả lời tự nhiên
       if (!isScheduleQuestion) {

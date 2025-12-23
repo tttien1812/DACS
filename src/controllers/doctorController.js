@@ -275,6 +275,32 @@ let getDoctorById = async (req, res) => {
   }
 };
 
+let getBookingDetail = async (req, res) => {
+  try {
+    let bookingId = req.query.bookingId;
+
+    if (!bookingId) {
+      return res.status(200).json({
+        errCode: 1,
+        errMessage: "Missing bookingId",
+      });
+    }
+
+    let data = await doctorService.getBookingDetail(bookingId);
+
+    return res.status(200).json({
+      errCode: 0,
+      data,
+    });
+  } catch (e) {
+    console.log(e);
+    return res.status(200).json({
+      errCode: -1,
+      errMessage: "Error from the server",
+    });
+  }
+};
+
 module.exports = {
   getTopDoctorHome: getTopDoctorHome,
   getAllDoctors: getAllDoctors,
@@ -296,4 +322,5 @@ module.exports = {
   approveBooking,
   getListNewBookingForDoctor,
   rejectBooking,
+  getBookingDetail,
 };

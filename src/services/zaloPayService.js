@@ -187,10 +187,19 @@ let getFinalBillByBookingId = async (bookingId) => {
           {
             model: db.Booking,
             as: "bookingData",
-            // include: [
-            //   { model: db.User, as: "patientData" },
-            //   { model: db.User, as: "doctorData" },
-            // ],
+            include: [
+              { model: db.BookingImage, as: "images" },
+              {
+                model: db.Allcode,
+                as: "timeTypeDataPatient",
+                attributes: ["valueVI", "valueEN"],
+              },
+              {
+                model: db.User,
+                as: "doctorData",
+                attributes: ["firstName", "lastName", "email", "phoneNumber"],
+              },
+            ],
           },
         ],
         raw: false,

@@ -98,8 +98,57 @@ let getDetailSpecialtyById = (inputId, location) => {
     }
   });
 };
+
+let getDoctorsBySpecialty = (specialtyID) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!specialtyID) {
+        return resolve({
+          errCode: 1,
+          errMessage: "Missing specialtyID",
+          data: [],
+        });
+      }
+
+      let doctors = await db.Doctor_Infor.findAll({
+        where: { specialtyID: specialtyID },
+        include: [
+          {
+            model: db.User,
+            as: "doctorInfo",
+            attributes: ["id", "firstName", "lastName"],
+          },
+        ],
+        raw: false,
+        nest: true,
+      });
+
+      // Convert avatar (base64) → binary nếu cần
+      // if (doctors && doctors.length > 0) {
+      //   doctors.forEach((doc) => {
+      //     if (doc.doctorInfo && doc.doctorInfo.image) {
+      //       doc.doctorInfo.image = Buffer.from(
+      //         doc.doctorInfo.image,
+      //         "base64"
+      //       ).toString("binary");
+      //     }
+      //   });
+      // }
+
+      return resolve({
+        errCode: 0,
+        errMessage: "OK",
+        data: doctors,
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   createSpecialty: createSpecialty,
   getAllSpecialty: getAllSpecialty,
   getDetailSpecialtyById: getDetailSpecialtyById,
+  getDoctorsBySpecialty,
 };
